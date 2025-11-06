@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kitchen Vinyl Wrapping Quotes</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
+
 <body>
     <div class="container">
         <!-- Login/Signup Section -->
@@ -15,7 +18,7 @@
                 <button id="login-tab" class="tab-btn active">Login</button>
                 <button id="signup-tab" class="tab-btn">Sign Up</button>
             </div>
-            
+
             <!-- Login Form -->
             <div id="login-form" class="auth-form">
                 <h2>Login</h2>
@@ -25,7 +28,7 @@
                     <button type="submit">Login</button>
                 </form>
             </div>
-            
+
             <!-- Signup Form -->
             <div id="signup-form" class="auth-form hidden">
                 <h2>Sign Up</h2>
@@ -47,13 +50,13 @@
                     <button id="logout-btn" class="logout-btn">Logout</button>
                 </div>
             </div>
-            
+
             <div class="calculator">
                 <div class="step">
                     <label for="doors-input">Number of Doors/Sides:</label>
                     <input type="number" id="doors-input" min="1" placeholder="Enter number of doors/sides">
                 </div>
-                
+
                 <div class="step" id="material-step" style="display: none;">
                     <h3>Select Material Type:</h3>
                     <div class="material-options">
@@ -79,14 +82,15 @@
                         </label>
                     </div>
                 </div>
-                
+
                 <div class="step" id="transport-step" style="display: none;">
                     <label for="transport-input">Transportation Cost (Optional):</label>
-                    <input type="number" id="transport-input" min="0" step="0.01" placeholder="Enter transportation cost (R0 if none)">
+                    <input type="number" id="transport-input" min="0" step="0.01"
+                        placeholder="Enter transportation cost (R0 if none)">
                 </div>
-                
+
                 <button id="calculate-btn" class="calculate-btn" style="display: none;">Calculate Quote</button>
-                
+
                 <div id="quote-result" class="quote-result" style="display: none;">
                     <h3>Quote Summary</h3>
                     <div class="result-details">
@@ -101,7 +105,8 @@
                         <p class="total"><strong>Total Quote:</strong> R<span id="result-total"></span></p>
                     </div>
                     <div class="quote-actions">
-                        <input type="text" id="quote-name-input" placeholder="Enter quote name (optional)" class="quote-name-input">
+                        <input type="text" id="quote-name-input" placeholder="Enter quote name (optional)"
+                            class="quote-name-input">
                         <button id="save-quote-btn" class="save-quote-btn">Save Quote</button>
                         <button id="new-quote-btn" class="new-quote-btn">New Quote</button>
                     </div>
@@ -118,8 +123,34 @@
                     <button id="logout-btn-saved" class="logout-btn">Logout</button>
                 </div>
             </div>
-            
+
             <div class="saved-quotes-content">
+                <div class="quotes-controls">
+                    <div class="search-filter-section">
+                        <input type="text" id="quote-search" placeholder="Search quotes by name or material..."
+                            class="search-input">
+                        <select id="material-filter" class="filter-select">
+                            <option value="">All Materials</option>
+                            <option value="Coverstyle">Coverstyle</option>
+                            <option value="Policut 6000">Policut 6000</option>
+                            <option value="Hexis">Hexis</option>
+                            <option value="Maizey Plastics">Maizey Plastics</option>
+                            <option value="Stixo (Gloss White/Light Grey)">Stixo (Gloss White/Light Grey)</option>
+                        </select>
+                        <select id="date-filter" class="filter-select">
+                            <option value="">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                            <option value="year">This Year</option>
+                        </select>
+                        <button id="clear-filters-btn" class="clear-filters-btn">Clear Filters</button>
+                    </div>
+                    <div class="export-section">
+                        <button id="export-all-btn" class="export-btn">Export All to PDF</button>
+                        <button id="export-filtered-btn" class="export-btn">Export Filtered to PDF</button>
+                    </div>
+                </div>
                 <div id="saved-quotes-list" class="saved-quotes-list">
                     <!-- Saved quotes will be loaded here -->
                 </div>
@@ -130,7 +161,8 @@
             </div>
         </div>
     </div>
-    
+
     <script src="script.js"></script>
 </body>
+
 </html>

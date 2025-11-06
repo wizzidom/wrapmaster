@@ -19,6 +19,17 @@ body {
     margin: 20px;
 }
 
+/* Desktop enhancements */
+@media (min-width: 1200px) {
+    .container {
+        max-width: 1200px;
+    }
+
+    .saved-quotes-container {
+        max-width: none;
+    }
+}
+
 /* Auth Styles */
 .auth-container {
     background: white;
@@ -115,7 +126,9 @@ body {
     gap: 10px;
 }
 
-.logout-btn, .saved-quotes-btn, .back-btn {
+.logout-btn,
+.saved-quotes-btn,
+.back-btn {
     background: rgba(255, 255, 255, 0.2);
     color: white;
     border: none;
@@ -125,7 +138,9 @@ body {
     transition: background 0.3s ease;
 }
 
-.logout-btn:hover, .saved-quotes-btn:hover, .back-btn:hover {
+.logout-btn:hover,
+.saved-quotes-btn:hover,
+.back-btn:hover {
     background: rgba(255, 255, 255, 0.3);
 }
 
@@ -192,7 +207,10 @@ body {
     color: #333;
 }
 
-.calculate-btn, .new-quote-btn, .save-quote-btn, .create-quote-btn {
+.calculate-btn,
+.new-quote-btn,
+.save-quote-btn,
+.create-quote-btn {
     width: 100%;
     padding: 15px;
     background: #28a745;
@@ -206,7 +224,10 @@ body {
     margin-top: 20px;
 }
 
-.calculate-btn:hover, .new-quote-btn:hover, .save-quote-btn:hover, .create-quote-btn:hover {
+.calculate-btn:hover,
+.new-quote-btn:hover,
+.save-quote-btn:hover,
+.create-quote-btn:hover {
     background: #218838;
 }
 
@@ -277,19 +298,21 @@ body {
     .container {
         margin: 10px;
     }
-    
-    .auth-form, .calculator {
+
+    .auth-form,
+    .calculator {
         padding: 20px;
     }
-    
+
     .header h1 {
         font-size: 18px;
     }
-    
+
     .material-options {
         grid-template-columns: 1fr;
     }
 }
+
 /* Saved
  Quotes Styles */
 .saved-quotes-container {
@@ -306,6 +329,14 @@ body {
 .saved-quotes-list {
     display: grid;
     gap: 20px;
+}
+
+/* Desktop grid layout for quotes */
+@media (min-width: 1200px) {
+    .saved-quotes-list {
+        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+        gap: 25px;
+    }
 }
 
 .saved-quote-item {
@@ -348,6 +379,14 @@ body {
     margin-bottom: 15px;
 }
 
+/* Desktop quote summary layout */
+@media (min-width: 1200px) {
+    .quote-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+    }
+}
+
 .quote-detail {
     display: flex;
     justify-content: space-between;
@@ -371,7 +410,24 @@ body {
     justify-content: flex-end;
 }
 
-.edit-quote-btn, .delete-quote-btn {
+/* Desktop quote actions */
+@media (min-width: 1200px) {
+    .quote-actions-saved {
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .export-individual-btn,
+    .edit-quote-btn,
+    .delete-quote-btn {
+        padding: 10px 20px;
+        font-size: 14px;
+        min-width: 120px;
+    }
+}
+
+.edit-quote-btn,
+.delete-quote-btn {
     padding: 8px 16px;
     border: none;
     border-radius: 5px;
@@ -482,7 +538,8 @@ body {
     margin-top: 20px;
 }
 
-.modal-save-btn, .modal-cancel-btn {
+.modal-save-btn,
+.modal-cancel-btn {
     flex: 1;
     padding: 12px;
     border: none;
@@ -533,4 +590,286 @@ body {
     border-radius: 8px;
     margin: 20px 0;
     text-align: center;
+}
+
+/* Search and Filter Controls */
+.quotes-controls {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    border: 2px solid #e1e5e9;
+}
+
+.search-filter-section {
+    display: grid;
+    grid-template-columns: minmax(200px, 2fr) minmax(120px, 1fr) minmax(120px, 1fr) auto;
+    gap: 15px;
+    margin-bottom: 15px;
+    align-items: center;
+}
+
+/* Desktop layout for search/filter */
+@media (min-width: 1200px) {
+    .search-filter-section {
+        grid-template-columns: 1fr 200px 200px 150px;
+        gap: 20px;
+    }
+
+    .quotes-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 30px;
+    }
+
+    .search-filter-section {
+        flex: 1;
+        margin-bottom: 0;
+    }
+
+    .export-section {
+        flex-shrink: 0;
+        align-self: flex-end;
+    }
+}
+
+.search-input,
+.filter-select {
+    padding: 12px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 16px;
+    background: white;
+}
+
+.search-input:focus,
+.filter-select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.clear-filters-btn {
+    padding: 12px 20px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+    white-space: nowrap;
+}
+
+.clear-filters-btn:hover {
+    background: #545b62;
+}
+
+.export-section {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.export-btn {
+    padding: 12px 20px;
+    background: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+    white-space: nowrap;
+}
+
+.export-btn:hover {
+    background: #138496;
+}
+
+.export-individual-btn {
+    background: #ffc107;
+    color: #212529;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.export-individual-btn:hover {
+    background: #e0a800;
+}
+
+/* Results count */
+.results-count {
+    margin-bottom: 20px;
+    color: #666;
+    font-style: italic;
+}
+
+/* No results message */
+.no-results-message {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 2px dashed #e1e5e9;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+    .search-filter-section {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .search-input {
+        grid-column: 1 / -1;
+        /* Search takes full width */
+    }
+}
+
+@media (max-width: 768px) {
+    .search-filter-section {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .export-section {
+        flex-direction: column;
+    }
+
+    .quotes-controls {
+        padding: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .quotes-controls {
+        padding: 10px;
+    }
+
+    .search-input,
+    .filter-select,
+    .clear-filters-btn {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    .export-btn {
+        font-size: 12px;
+        padding: 10px 15px;
+    }
+}
+
+/* De
+sktop-specific enhancements */
+@media (min-width: 1200px) {
+
+    /* Better typography on desktop */
+    .quote-title {
+        font-size: 20px;
+    }
+
+    .quote-date {
+        font-size: 16px;
+    }
+
+    .quote-total {
+        font-size: 22px;
+        padding: 20px;
+    }
+
+    /* Enhanced spacing */
+    .saved-quote-item {
+        padding: 25px;
+        border-radius: 12px;
+    }
+
+    .quote-header {
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+    }
+
+    /* Better button styling */
+    .export-btn {
+        padding: 15px 25px;
+        font-size: 16px;
+        min-width: 180px;
+    }
+
+    .clear-filters-btn {
+        padding: 15px 25px;
+        font-size: 16px;
+        min-width: 150px;
+    }
+
+    /* Enhanced input styling */
+    .search-input,
+    .filter-select {
+        padding: 15px;
+        font-size: 16px;
+        border-radius: 10px;
+    }
+
+    /* Better header layout */
+    .header {
+        padding: 25px 30px;
+    }
+
+    .header h1 {
+        font-size: 28px;
+    }
+
+    .header-actions {
+        gap: 15px;
+    }
+
+    .logout-btn,
+    .saved-quotes-btn,
+    .back-btn {
+        padding: 12px 25px;
+        font-size: 16px;
+    }
+
+    /* Enhanced saved quotes content */
+    .saved-quotes-content {
+        padding: 50px;
+    }
+
+    /* Better results count styling */
+    .results-count {
+        font-size: 16px;
+        margin-bottom: 25px;
+        color: #555;
+    }
+
+    /* Hover effects for desktop */
+    .saved-quote-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        transition: all 0.3s ease;
+    }
+
+    .export-individual-btn:hover,
+    .edit-quote-btn:hover,
+    .delete-quote-btn:hover {
+        transform: translateY(-1px);
+        transition: all 0.2s ease;
+    }
+}
+
+/* Ultra-wide desktop (1600px+) */
+@media (min-width: 1600px) {
+    .container {
+        max-width: 1400px;
+    }
+
+    .saved-quotes-list {
+        grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+        gap: 30px;
+    }
+
+    .saved-quotes-content {
+        padding: 60px;
+    }
 }

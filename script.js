@@ -23,6 +23,7 @@ class VinylQuoteApp {
         this.currentUser = null;
         this.currentQuote = null;
         this.savedQuotes = [];
+        this.filteredQuotes = [];
         this.init();
     }
 
@@ -48,6 +49,16 @@ class VinylQuoteApp {
         document.getElementById('saved-quotes-btn').addEventListener('click', () => this.showSavedQuotes());
         document.getElementById('back-to-calculator-btn').addEventListener('click', () => this.showQuoteSection());
         document.getElementById('create-first-quote-btn').addEventListener('click', () => this.showQuoteSection());
+
+        // Search and filtering
+        document.getElementById('quote-search').addEventListener('input', () => this.filterQuotes());
+        document.getElementById('material-filter').addEventListener('change', () => this.filterQuotes());
+        document.getElementById('date-filter').addEventListener('change', () => this.filterQuotes());
+        document.getElementById('clear-filters-btn').addEventListener('click', () => this.clearFilters());
+
+        // Export functionality
+        document.getElementById('export-all-btn').addEventListener('click', () => this.exportToPDF('all'));
+        document.getElementById('export-filtered-btn').addEventListener('click', () => this.exportToPDF('filtered'));
 
         // Quote calculator
         document.getElementById('doors-input').addEventListener('input', () => this.handleDoorsInput());
@@ -367,6 +378,7 @@ class VinylQuoteApp {
             }
 
             this.savedQuotes = data || [];
+            this.filteredQuotes = [...this.savedQuotes];
             this.renderSavedQuotes();
         } catch (error) {
             this.showError('Failed to load saved quotes. Please try again.');
@@ -377,15 +389,41 @@ class VinylQuoteApp {
         const container = document.getElementById('saved-quotes-list');
         const noQuotesMessage = document.getElementById('no-quotes-message');
 
+        // Show results count
+        const resultsCount = document.querySelector('.results-count') || document.createElement('div');
+        resultsCount.className = 'results-count';
+
         if (this.savedQuotes.length === 0) {
             container.innerHTML = '';
             noQuotesMessage.classList.remove('hidden');
+            resultsCount.textContent = '';
             return;
         }
 
         noQuotesMessage.classList.add('hidden');
 
-        container.innerHTML = this.savedQuotes.map(quote => `
+        // Update results count
+        const totalQuotes = this.savedQuotes.length;
+        const filteredCount = this.filteredQuotes.length;
+        resultsCount.textContent = filteredCount === totalQuotes ?
+            `Showing ${totalQuotes} quote${totalQuotes !== 1 ? 's' : ''}` :
+            `Showing ${filteredCount} of ${totalQuotes} quote${totalQuotes !== 1 ? 's' : ''}`;
+
+        if (!document.querySelector('.results-count')) {
+            container.parentNode.insertBefore(resultsCount, container);
+        }
+
+        if (this.filteredQuotes.length === 0) {
+            container.innerHTML = `
+                <div class="no-results-message">
+                    <p>No quotes match your current filters.</p>
+                    <button onclick="app.clearFilters()" class="clear-filters-btn">Clear Filters</button>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = this.filteredQuotes.map(quote => `
             <div class="saved-quote-item" data-quote-id="${quote.id}">
                 <div class="quote-header">
                     <div class="quote-title">${quote.quote_name}</div>
@@ -416,6 +454,7 @@ class VinylQuoteApp {
                 </div>
                 
                 <div class="quote-actions-saved">
+                    <button class="export-individual-btn" onclick="app.exportSingleQuote('${quote.id}')">Export PDF</button>
                     <button class="edit-quote-btn" onclick="app.editQuote('${quote.id}')">Edit Name</button>
                     <button class="delete-quote-btn" onclick="app.deleteQuote('${quote.id}')">Delete</button>
                 </div>
@@ -520,7 +559,479 @@ class VinylQuoteApp {
             radio.checked = false;
         });
     }
+
+    // Search and Filter Methods
+    filterQuotes() {
+        const searchTerm = document.getElementById('quote-search').value.toLowerCase();
+        const materialFilter = document.getElementById('material-filter').value;
+        const dateFilter = document.getElementById('date-filter').value;
+
+        this.filteredQuotes = this.savedQuotes.filter(quote => {
+            // Search filter
+            const matchesSearch = !searchTerm ||
+                quote.quote_name.toLowerCase().includes(searchTerm) ||
+                quote.material_name.toLowerCase().includes(searchTerm);
+
+            // Material filter
+            const matchesMaterial = !materialFilter || quote.material_name === materialFilter;
+
+            // Date filter
+            const matchesDate = this.matchesDateFilter(quote.created_at, dateFilter);
+
+            return matchesSearch && matchesMaterial && matchesDate;
+        });
+
+        this.renderSavedQuotes();
+    }
+
+    matchesDateFilter(dateString, filter) {
+        if (!filter) return true;
+
+        const quoteDate = new Date(dateString);
+        const now = new Date();
+
+        switch (filter) {
+            case 'today':
+                return quoteDate.toDateString() === now.toDateString();
+            case 'week':
+                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                return quoteDate >= weekAgo;
+            case 'month':
+                return quoteDate.getMonth() === now.getMonth() &&
+                    quoteDate.getFullYear() === now.getFullYear();
+            case 'year':
+                return quoteDate.getFullYear() === now.getFullYear();
+            default:
+                return true;
+        }
+    }
+
+    clearFilters() {
+        document.getElementById('quote-search').value = '';
+        document.getElementById('material-filter').value = '';
+        document.getElementById('date-filter').value = '';
+        this.filteredQuotes = [...this.savedQuotes];
+        this.renderSavedQuotes();
+    }
+
+    // PDF Export Methods
+    async exportToPDF(type) {
+        const quotesToExport = type === 'all' ? this.savedQuotes : this.filteredQuotes;
+
+        if (quotesToExport.length === 0) {
+            this.showError('No quotes to export');
+            return;
+        }
+
+        // Get customer information for bulk export
+        const customerName = prompt('Enter customer name (for bulk export):');
+        if (!customerName || customerName.trim() === '') {
+            this.showError('Customer name is required for export');
+            return;
+        }
+
+        const customerLocation = prompt('Enter customer location/address:');
+        if (!customerLocation || customerLocation.trim() === '') {
+            this.showError('Customer location is required for export');
+            return;
+        }
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Add logo
+            try {
+                const logoImg = new Image();
+                logoImg.onload = () => {
+                    this.generateBulkQuotePDF(doc, quotesToExport, type, customerName.trim(), customerLocation.trim(), logoImg);
+                };
+                logoImg.onerror = () => {
+                    this.generateBulkQuotePDF(doc, quotesToExport, type, customerName.trim(), customerLocation.trim(), null);
+                };
+                logoImg.src = 'logo.jpg';
+            } catch (error) {
+                this.generateBulkQuotePDF(doc, quotesToExport, type, customerName.trim(), customerLocation.trim(), null);
+            }
+
+        } catch (error) {
+            console.error('PDF export error:', error);
+            this.showError('Failed to export PDF. Please try again.');
+        }
+    }
+
+    generateBulkQuotePDF(doc, quotesToExport, type, customerName, customerLocation, logoImg) {
+        const pageWidth = doc.internal.pageSize.width;
+        const pageHeight = doc.internal.pageSize.height;
+        const margin = 20;
+        const contentWidth = pageWidth - (margin * 2);
+        let yPosition = margin;
+
+        // Add logo if available
+        if (logoImg) {
+            try {
+                doc.addImage(logoImg, 'JPEG', margin, yPosition, 35, 25);
+                yPosition = Math.max(yPosition + 30, yPosition);
+            } catch (error) {
+                console.log('Could not add logo to PDF');
+            }
+        }
+
+        // Company header
+        doc.setFontSize(22);
+        doc.setFont(undefined, 'bold');
+        doc.text('KITCHEN WRAP MASTERS', logoImg ? 65 : margin, logoImg ? 35 : yPosition);
+        yPosition += logoImg ? 12 : 20;
+
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'normal');
+        doc.text('Professional Kitchen Vinyl Wrapping Services', logoImg ? 65 : margin, yPosition);
+        yPosition += 25;
+
+        // Header line
+        doc.setLineWidth(0.5);
+        doc.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 15;
+
+        // Document title and info in header box
+        doc.setFillColor(245, 245, 245);
+        doc.rect(margin, yPosition, contentWidth, 30, 'F');
+        
+        doc.setFontSize(16);
+        doc.setFont(undefined, 'bold');
+        doc.text('QUOTATION SUMMARY', margin + 10, yPosition + 12);
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Customer: ${customerName}`, margin + 10, yPosition + 22);
+        doc.text(`Location: ${customerLocation}`, margin + 10, yPosition + 28);
+        doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth - 80, yPosition + 22);
+        doc.text(`Total Quotes: ${quotesToExport.length}`, pageWidth - 80, yPosition + 28);
+        yPosition += 45;
+
+        quotesToExport.forEach((quote, index) => {
+            // Check if we need a new page (leave space for quote content)
+            if (yPosition > pageHeight - 80) {
+                doc.addPage();
+                yPosition = margin + 20;
+                
+                // Add company header on new page
+                doc.setFontSize(16);
+                doc.setFont(undefined, 'bold');
+                doc.text('KITCHEN WRAP MASTERS', margin, yPosition);
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                doc.text('Professional Kitchen Vinyl Wrapping Services', margin, yPosition + 8);
+                yPosition += 25;
+            }
+
+            // Quote header with background
+            doc.setFillColor(250, 250, 250);
+            doc.rect(margin, yPosition, contentWidth, 15, 'F');
+            
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.text(`${index + 1}. ${quote.quote_name}`, margin + 5, yPosition + 10);
+
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Date: ${new Date(quote.created_at).toLocaleDateString()}`, pageWidth - 60, yPosition + 10);
+
+            yPosition += 20;
+
+            // Quote details in organized table format
+            const leftCol = margin + 5;
+            const midCol = margin + 90;
+            const rightCol = margin + 140;
+            
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'normal');
+
+            // Project info
+            doc.text(`Doors: ${quote.doors}`, leftCol, yPosition);
+            doc.text(`Sqm: ${quote.square_metres}`, midCol, yPosition);
+            doc.text(`Days: ${quote.project_days}`, rightCol, yPosition);
+            yPosition += 6;
+
+            // Material info
+            doc.text(`Material: ${quote.material_name}`, leftCol, yPosition);
+            yPosition += 6;
+
+            // Cost breakdown in columns
+            doc.text(`Material: R${parseFloat(quote.material_cost).toFixed(2)}`, leftCol, yPosition);
+            doc.text(`Install: R${parseFloat(quote.installation_fee).toFixed(2)}`, midCol, yPosition);
+            doc.text(`Food: R${parseFloat(quote.food_cost).toFixed(2)}`, rightCol, yPosition);
+            yPosition += 6;
+
+            doc.text(`Transport: R${parseFloat(quote.transport_cost).toFixed(2)}`, leftCol, yPosition);
+            yPosition += 10;
+
+            // Total with emphasis
+            doc.setFillColor(240, 240, 240);
+            doc.rect(margin, yPosition, contentWidth, 12, 'F');
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'bold');
+            doc.text(`TOTAL: R${parseFloat(quote.total_cost).toFixed(2)}`, leftCol, yPosition + 8);
+            yPosition += 20;
+
+            // Separator line
+            doc.setLineWidth(0.3);
+            doc.line(margin, yPosition, pageWidth - margin, yPosition);
+            yPosition += 10;
+        });
+
+        // Add footer section
+        if (yPosition > pageHeight - 60) {
+            doc.addPage();
+            yPosition = margin + 20;
+        }
+
+        yPosition += 10;
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('TERMS & CONDITIONS', margin, yPosition);
+        yPosition += 8;
+
+        doc.setLineWidth(0.3);
+        doc.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 10;
+
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'normal');
+        const terms = [
+            '• All quotes valid for 30 days from date of issue',
+            '• 50% deposit required to commence work',
+            '• Final payment due upon completion',
+            '• Materials include manufacturer warranty',
+            '• Professional installation guaranteed'
+        ];
+
+        terms.forEach(term => {
+            doc.text(term, margin + 5, yPosition);
+            yPosition += 5;
+        });
+
+        // Footer with company branding
+        yPosition += 10;
+        doc.setFillColor(102, 126, 234);
+        doc.rect(margin, yPosition, contentWidth, 20, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('Thank you for choosing Kitchen Wrap Masters!', margin + 10, yPosition + 12);
+        
+        // Reset text color
+        doc.setTextColor(0, 0, 0);
+
+        // Save the PDF
+        const filename = `${customerName.replace(/[^a-z0-9]/gi, '_')}_${type === 'all' ? 'all' : 'filtered'}_quotes.pdf`;
+        doc.save(filename);
+
+        this.showSuccess(`PDF exported successfully: ${filename}`);
+    }
+
+    async exportSingleQuote(quoteId) {
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) {
+            this.showError('Quote not found');
+            return;
+        }
+
+        // Get customer information
+        const customerName = prompt('Enter customer name:');
+        if (!customerName || customerName.trim() === '') {
+            this.showError('Customer name is required for export');
+            return;
+        }
+
+        const customerLocation = prompt('Enter customer location/address:');
+        if (!customerLocation || customerLocation.trim() === '') {
+            this.showError('Customer location is required for export');
+            return;
+        }
+
+        const colorChosen = prompt('Enter the color/finish chosen by customer:');
+        if (!colorChosen || colorChosen.trim() === '') {
+            this.showError('Color/finish is required for export');
+            return;
+        }
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Add logo
+            try {
+                const logoImg = new Image();
+                logoImg.onload = () => {
+                    this.generateSingleQuotePDF(doc, quote, customerName.trim(), customerLocation.trim(), colorChosen.trim(), logoImg);
+                };
+                logoImg.onerror = () => {
+                    this.generateSingleQuotePDF(doc, quote, customerName.trim(), customerLocation.trim(), colorChosen.trim(), null);
+                };
+                logoImg.src = 'logo.jpg';
+            } catch (error) {
+                this.generateSingleQuotePDF(doc, quote, customerName.trim(), customerLocation.trim(), colorChosen.trim(), null);
+            }
+
+        } catch (error) {
+            console.error('PDF export error:', error);
+            this.showError('Failed to export quote. Please try again.');
+        }
+    }
+
+    generateSingleQuotePDF(doc, quote, customerName, customerLocation, colorChosen, logoImg) {
+        const pageWidth = doc.internal.pageSize.width;
+        const pageHeight = doc.internal.pageSize.height;
+        const margin = 15;
+        const contentWidth = pageWidth - (margin * 2);
+        let yPosition = margin;
+
+        // Add logo if available (smaller for compact layout)
+        if (logoImg) {
+            try {
+                doc.addImage(logoImg, 'JPEG', margin, yPosition, 30, 20);
+                yPosition = Math.max(yPosition + 25, yPosition);
+            } catch (error) {
+                console.log('Could not add logo to PDF');
+            }
+        }
+
+        // Company header (more compact)
+        doc.setFontSize(18);
+        doc.setFont(undefined, 'bold');
+        doc.text('KITCHEN WRAP MASTERS', logoImg ? 50 : margin, logoImg ? 25 : yPosition);
+        yPosition += logoImg ? 8 : 15;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text('Professional Kitchen Vinyl Wrapping Services', logoImg ? 50 : margin, yPosition);
+        yPosition += 15;
+
+        // Header line
+        doc.setLineWidth(0.5);
+        doc.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 10;
+
+        // Quote title and info in compact header
+        doc.setFillColor(245, 245, 245);
+        doc.rect(margin, yPosition, contentWidth, 20, 'F');
+        
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('QUOTATION', margin + 8, yPosition + 8);
+        
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Quote: ${quote.quote_name}`, margin + 8, yPosition + 16);
+        doc.text(`Date: ${new Date(quote.created_at).toLocaleDateString()}`, pageWidth - 60, yPosition + 16);
+        yPosition += 25;
+
+        // Customer information (more compact)
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('CUSTOMER DETAILS', margin, yPosition);
+        yPosition += 6;
+
+        doc.setLineWidth(0.3);
+        doc.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 8;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Customer: ${customerName}`, margin + 3, yPosition);
+        yPosition += 6;
+        doc.text(`Location: ${customerLocation}`, margin + 3, yPosition);
+        yPosition += 15;
+
+        // Project details section (simplified)
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('PROJECT DETAILS', margin, yPosition);
+        yPosition += 6;
+
+        doc.setLineWidth(0.3);
+        doc.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 8;
+
+        // Create a compact table layout
+        const leftCol = margin + 3;
+        const rightCol = margin + 85;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+
+        // Only show essential project details
+        const projectDetails = [
+            ['Doors/Sides:', quote.doors],
+            ['Square Metres:', quote.square_metres],
+            ['Duration:', `${quote.project_days} day(s)`],
+            ['Material:', quote.material_name],
+            ['Color/Finish:', colorChosen]
+        ];
+
+        projectDetails.forEach(([label, value]) => {
+            doc.text(label, leftCol, yPosition);
+            doc.setFont(undefined, 'bold');
+            doc.text(String(value), rightCol, yPosition);
+            doc.setFont(undefined, 'normal');
+            yPosition += 6;
+        });
+
+        // Total cost section with emphasis
+        yPosition += 15;
+        doc.setFillColor(240, 240, 240);
+        doc.rect(margin, yPosition, contentWidth, 18, 'F');
+        
+        doc.setFontSize(13);
+        doc.setFont(undefined, 'bold');
+        doc.text('TOTAL COST FOR VINYL WRAPPING SERVICE:', leftCol, yPosition + 8);
+        yPosition += 12;
+        doc.setFontSize(16);
+        doc.text(`R${parseFloat(quote.total_cost).toFixed(2)}`, leftCol, yPosition + 8);
+        yPosition += 25;
+
+        // Terms and conditions reference
+        yPosition += 10;
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(0, 0, 0);
+        doc.text('Terms & Conditions: ', margin, yPosition);
+        
+        // Website link in blue
+        doc.setTextColor(0, 0, 255);
+        doc.text('https://kitchenwrapmasters.co.za/termsandconditions', margin + 45, yPosition);
+        
+        // Deposit information in red
+        yPosition += 8;
+        doc.setTextColor(255, 0, 0);
+        doc.setFontSize(8);
+        doc.text('A 50% deposit may be required to cover material costs. If the deposit has not been paid', margin, yPosition);
+        yPosition += 4;
+        doc.text('in advance, full or partial payment must be made upon our arrival before work begins.', margin, yPosition);
+        
+        // Footer section
+        yPosition += 15;
+        doc.setFillColor(102, 126, 234);
+        doc.rect(margin, yPosition, contentWidth, 20, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('Thank you for choosing Kitchen Wrap Masters!', margin + 10, yPosition + 12);
+        
+        // Reset text color
+        doc.setTextColor(0, 0, 0);
+
+        // Save the PDF
+        const filename = `${customerName.replace(/[^a-z0-9]/gi, '_')}_${quote.quote_name.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+        doc.save(filename);
+
+        this.showSuccess(`Quote exported successfully: ${filename}`);
+    }
 }
+
 
 // Initialize the app when DOM is loaded
 let app;
