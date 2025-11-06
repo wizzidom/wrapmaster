@@ -110,7 +110,12 @@ body {
     font-size: 24px;
 }
 
-.logout-btn {
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.logout-btn, .saved-quotes-btn, .back-btn {
     background: rgba(255, 255, 255, 0.2);
     color: white;
     border: none;
@@ -120,7 +125,7 @@ body {
     transition: background 0.3s ease;
 }
 
-.logout-btn:hover {
+.logout-btn:hover, .saved-quotes-btn:hover, .back-btn:hover {
     background: rgba(255, 255, 255, 0.3);
 }
 
@@ -187,7 +192,7 @@ body {
     color: #333;
 }
 
-.calculate-btn, .new-quote-btn {
+.calculate-btn, .new-quote-btn, .save-quote-btn, .create-quote-btn {
     width: 100%;
     padding: 15px;
     background: #28a745;
@@ -201,8 +206,37 @@ body {
     margin-top: 20px;
 }
 
-.calculate-btn:hover, .new-quote-btn:hover {
+.calculate-btn:hover, .new-quote-btn:hover, .save-quote-btn:hover, .create-quote-btn:hover {
     background: #218838;
+}
+
+.quote-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.quote-name-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+.quote-name-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.save-quote-btn {
+    background: #007bff;
+    margin-top: 0;
+}
+
+.save-quote-btn:hover {
+    background: #0056b3;
 }
 
 .quote-result {
@@ -255,4 +289,248 @@ body {
     .material-options {
         grid-template-columns: 1fr;
     }
+}
+/* Saved
+ Quotes Styles */
+.saved-quotes-container {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.saved-quotes-content {
+    padding: 40px;
+}
+
+.saved-quotes-list {
+    display: grid;
+    gap: 20px;
+}
+
+.saved-quote-item {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 20px;
+    border: 2px solid #e1e5e9;
+    transition: all 0.3s ease;
+}
+
+.saved-quote-item:hover {
+    border-color: #667eea;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.quote-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.quote-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.quote-date {
+    font-size: 14px;
+    color: #666;
+}
+
+.quote-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.quote-detail {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+}
+
+.quote-total {
+    font-size: 20px;
+    font-weight: bold;
+    color: #28a745;
+    text-align: center;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    margin: 15px 0;
+}
+
+.quote-actions-saved {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.edit-quote-btn, .delete-quote-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+}
+
+.edit-quote-btn {
+    background: #ffc107;
+    color: #212529;
+}
+
+.edit-quote-btn:hover {
+    background: #e0a800;
+}
+
+.delete-quote-btn {
+    background: #dc3545;
+    color: white;
+}
+
+.delete-quote-btn:hover {
+    background: #c82333;
+}
+
+.no-quotes-message {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.no-quotes-message p {
+    font-size: 18px;
+    margin-bottom: 20px;
+}
+
+/* Edit Quote Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 10px;
+    padding: 30px;
+    max-width: 400px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #333;
+}
+
+.close-modal-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+}
+
+.close-modal-btn:hover {
+    color: #333;
+}
+
+.modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.modal-form input {
+    padding: 12px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+.modal-form input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-save-btn, .modal-cancel-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.modal-save-btn {
+    background: #28a745;
+    color: white;
+}
+
+.modal-save-btn:hover {
+    background: #218838;
+}
+
+.modal-cancel-btn {
+    background: #6c757d;
+    color: white;
+}
+
+.modal-cancel-btn:hover {
+    background: #545b62;
+}
+
+/* Loading and Error States */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+}
+
+.error-message {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    text-align: center;
+}
+
+.success-message {
+    background: #d4edda;
+    color: #155724;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    text-align: center;
 }

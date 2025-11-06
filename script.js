@@ -1,7 +1,28 @@
+// Supabase configuration
+const SUPABASE_URL = 'https://ambfzfwunqeumfbgaacp.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtYmZ6Znd1bnFldW1mYmdhYWNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NTA0MjEsImV4cCI6MjA3ODAyNjQyMX0.6_1OCz9VhJxAEAvQFsg3JhQiMwBYA7XepCXHPXLHXTQ';
+
+// Debug logging
+console.log('Supabase URL:', SUPABASE_URL);
+console.log('Supabase Key:', SUPABASE_ANON_KEY.substring(0, 20) + '...');
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Test connection
+supabase.auth.getSession().then(({ data, error }) => {
+    if (error) {
+        console.error('Supabase connection error:', error);
+    } else {
+        console.log('Supabase connected successfully');
+    }
+});
+
 // User authentication and quote calculator functionality
 class VinylQuoteApp {
     constructor() {
         this.currentUser = null;
+        this.currentQuote = null;
+        this.savedQuotes = [];
         this.init();
     }
 
@@ -19,8 +40,14 @@ class VinylQuoteApp {
         document.getElementById('loginForm').addEventListener('submit', (e) => this.handleLogin(e));
         document.getElementById('signupForm').addEventListener('submit', (e) => this.handleSignup(e));
 
-        // Logout
+        // Logout buttons
         document.getElementById('logout-btn').addEventListener('click', () => this.logout());
+        document.getElementById('logout-btn-saved').addEventListener('click', () => this.logout());
+
+        // Navigation
+        document.getElementById('saved-quotes-btn').addEventListener('click', () => this.showSavedQuotes());
+        document.getElementById('back-to-calculator-btn').addEventListener('click', () => this.showQuoteSection());
+        document.getElementById('create-first-quote-btn').addEventListener('click', () => this.showQuoteSection());
 
         // Quote calculator
         document.getElementById('doors-input').addEventListener('input', () => this.handleDoorsInput());
@@ -30,6 +57,7 @@ class VinylQuoteApp {
         document.getElementById('transport-input').addEventListener('input', () => this.handleTransportInput());
         document.getElementById('calculate-btn').addEventListener('click', () => this.calculateQuote());
         document.getElementById('new-quote-btn').addEventListener('click', () => this.resetQuote());
+        document.getElementById('save-quote-btn').addEventListener('click', () => this.saveQuote());
     }
 
     showLoginForm() {
@@ -46,89 +74,135 @@ class VinylQuoteApp {
         document.getElementById('login-form').classList.add('hidden');
     }
 
-    handleLogin(e) {
+    async handleLogin(e) {
         e.preventDefault();
         const email = document.getElementById('login-email').value;
         const password = document.getElementById('login-password').value;
 
-        // Simple validation
         if (!email || !password) {
-            alert('Please fill in all fields');
+            this.showError('Please fill in all fields');
             return;
         }
 
-        // Check if user exists in localStorage
-        const users = JSON.parse(localStorage.getItem('vinylQuoteUsers') || '[]');
-        const user = users.find(u => u.email === email && u.password === password);
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
 
-        if (user) {
-            this.currentUser = user;
-            localStorage.setItem('currentUser', JSON.stringify(user));
+            if (error) {
+                this.showError(error.message);
+                return;
+            }
+
+            this.currentUser = data.user;
             this.showQuoteSection();
-        } else {
-            alert('Invalid email or password');
+            this.showSuccess('Login successful!');
+        } catch (error) {
+            this.showError('Login failed. Please try again.');
         }
     }
 
-    handleSignup(e) {
+    async handleSignup(e) {
         e.preventDefault();
         const name = document.getElementById('signup-name').value;
         const email = document.getElementById('signup-email').value;
         const password = document.getElementById('signup-password').value;
 
-        // Simple validation
         if (!name || !email || !password) {
-            alert('Please fill in all fields');
+            this.showError('Please fill in all fields');
             return;
         }
 
         if (password.length < 6) {
-            alert('Password must be at least 6 characters long');
+            this.showError('Password must be at least 6 characters long');
             return;
         }
 
-        // Check if user already exists
-        const users = JSON.parse(localStorage.getItem('vinylQuoteUsers') || '[]');
-        if (users.find(u => u.email === email)) {
-            alert('User with this email already exists');
-            return;
-        }
+        try {
+            console.log('Attempting signup with:', { email, name });
 
-        // Create new user
-        const newUser = { name, email, password, id: Date.now() };
-        users.push(newUser);
-        localStorage.setItem('vinylQuoteUsers', JSON.stringify(users));
+            const { data, error } = await supabase.auth.signUp({
+                email: email,
+                password: password,
+                options: {
+                    data: {
+                        full_name: name
+                    }
+                }
+            });
 
-        this.currentUser = newUser;
-        localStorage.setItem('currentUser', JSON.stringify(newUser));
-        this.showQuoteSection();
-    }
+            console.log('Signup response:', { data, error });
 
-    logout() {
-        this.currentUser = null;
-        localStorage.removeItem('currentUser');
-        this.showAuthSection();
-        this.resetQuote();
-    }
+            if (error) {
+                console.error('Supabase signup error:', error);
+                this.showError(error.message);
+                return;
+            }
 
-    checkAuthStatus() {
-        const savedUser = localStorage.getItem('currentUser');
-        if (savedUser) {
-            this.currentUser = JSON.parse(savedUser);
+            this.currentUser = data.user;
             this.showQuoteSection();
-        } else {
+            this.showSuccess('Account created successfully!');
+        } catch (error) {
+            console.error('Signup catch error:', error);
+            this.showError('Signup failed: ' + error.message);
+        }
+    }
+
+    async logout() {
+        try {
+            await supabase.auth.signOut();
+            this.currentUser = null;
+            this.showAuthSection();
+            this.resetQuote();
+        } catch (error) {
+            this.showError('Logout failed. Please try again.');
+        }
+    }
+
+    async checkAuthStatus() {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (user) {
+                this.currentUser = user;
+                this.showQuoteSection();
+            } else {
+                this.showAuthSection();
+            }
+        } catch (error) {
             this.showAuthSection();
         }
+
+        // Listen for auth changes
+        supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN') {
+                this.currentUser = session.user;
+                this.showQuoteSection();
+            } else if (event === 'SIGNED_OUT') {
+                this.currentUser = null;
+                this.showAuthSection();
+            }
+        });
     }
 
     showAuthSection() {
         document.getElementById('auth-section').classList.remove('hidden');
         document.getElementById('quote-section').classList.add('hidden');
+        document.getElementById('saved-quotes-section').classList.add('hidden');
     }
 
     showQuoteSection() {
         document.getElementById('auth-section').classList.add('hidden');
         document.getElementById('quote-section').classList.remove('hidden');
+        document.getElementById('saved-quotes-section').classList.add('hidden');
+    }
+
+    async showSavedQuotes() {
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('quote-section').classList.add('hidden');
+        document.getElementById('saved-quotes-section').classList.remove('hidden');
+        await this.loadSavedQuotes();
     }
 
     handleDoorsInput() {
@@ -234,23 +308,203 @@ class VinylQuoteApp {
 
         document.getElementById('quote-result').style.display = 'block';
 
-        // Save quote to user's history (optional feature)
-        this.saveQuoteToHistory(quote);
+        // Store current quote for saving
+        this.currentQuote = quote;
     }
 
-    saveQuoteToHistory(quote) {
-        if (!this.currentUser) return;
-
-        const quoteHistory = JSON.parse(localStorage.getItem(`quotes_${this.currentUser.id}`) || '[]');
-        quote.timestamp = new Date().toISOString();
-        quoteHistory.push(quote);
-
-        // Keep only last 10 quotes
-        if (quoteHistory.length > 10) {
-            quoteHistory.shift();
+    async saveQuote() {
+        if (!this.currentUser || !this.currentQuote) {
+            this.showError('No quote to save');
+            return;
         }
 
-        localStorage.setItem(`quotes_${this.currentUser.id}`, JSON.stringify(quoteHistory));
+        const quoteName = document.getElementById('quote-name-input').value.trim() ||
+            `Quote ${new Date().toLocaleDateString()}`;
+
+        try {
+            const { data, error } = await supabase
+                .from('saved_quotes')
+                .insert([{
+                    user_id: this.currentUser.id,
+                    doors: this.currentQuote.doors,
+                    square_metres: this.currentQuote.squareMetres,
+                    project_days: this.currentQuote.projectDays,
+                    material_name: this.currentQuote.materialName,
+                    material_rate: this.currentQuote.materialRate,
+                    material_cost: this.currentQuote.materialCost,
+                    installation_fee: this.currentQuote.installationFee,
+                    food_cost: this.currentQuote.foodCost,
+                    transport_cost: this.currentQuote.transportCost,
+                    total_cost: this.currentQuote.totalCost,
+                    quote_name: quoteName
+                }]);
+
+            if (error) {
+                this.showError('Failed to save quote: ' + error.message);
+                return;
+            }
+
+            this.showSuccess('Quote saved successfully!');
+            document.getElementById('quote-name-input').value = '';
+        } catch (error) {
+            this.showError('Failed to save quote. Please try again.');
+        }
+    }
+
+    async loadSavedQuotes() {
+        if (!this.currentUser) return;
+
+        try {
+            const { data, error } = await supabase
+                .from('saved_quotes')
+                .select('*')
+                .eq('user_id', this.currentUser.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                this.showError('Failed to load saved quotes: ' + error.message);
+                return;
+            }
+
+            this.savedQuotes = data || [];
+            this.renderSavedQuotes();
+        } catch (error) {
+            this.showError('Failed to load saved quotes. Please try again.');
+        }
+    }
+
+    renderSavedQuotes() {
+        const container = document.getElementById('saved-quotes-list');
+        const noQuotesMessage = document.getElementById('no-quotes-message');
+
+        if (this.savedQuotes.length === 0) {
+            container.innerHTML = '';
+            noQuotesMessage.classList.remove('hidden');
+            return;
+        }
+
+        noQuotesMessage.classList.add('hidden');
+
+        container.innerHTML = this.savedQuotes.map(quote => `
+            <div class="saved-quote-item" data-quote-id="${quote.id}">
+                <div class="quote-header">
+                    <div class="quote-title">${quote.quote_name}</div>
+                    <div class="quote-date">${new Date(quote.created_at).toLocaleDateString()}</div>
+                </div>
+                
+                <div class="quote-summary">
+                    <div class="quote-detail">
+                        <span>Doors/Sides:</span>
+                        <span>${quote.doors}</span>
+                    </div>
+                    <div class="quote-detail">
+                        <span>Square Metres:</span>
+                        <span>${quote.square_metres}</span>
+                    </div>
+                    <div class="quote-detail">
+                        <span>Material:</span>
+                        <span>${quote.material_name}</span>
+                    </div>
+                    <div class="quote-detail">
+                        <span>Duration:</span>
+                        <span>${quote.project_days} day(s)</span>
+                    </div>
+                </div>
+                
+                <div class="quote-total">
+                    Total: R${parseFloat(quote.total_cost).toFixed(2)}
+                </div>
+                
+                <div class="quote-actions-saved">
+                    <button class="edit-quote-btn" onclick="app.editQuote('${quote.id}')">Edit Name</button>
+                    <button class="delete-quote-btn" onclick="app.deleteQuote('${quote.id}')">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async editQuote(quoteId) {
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) return;
+
+        const newName = prompt('Enter new quote name:', quote.quote_name);
+        if (!newName || newName.trim() === '') return;
+
+        try {
+            const { error } = await supabase
+                .from('saved_quotes')
+                .update({ quote_name: newName.trim() })
+                .eq('id', quoteId);
+
+            if (error) {
+                this.showError('Failed to update quote: ' + error.message);
+                return;
+            }
+
+            this.showSuccess('Quote updated successfully!');
+            await this.loadSavedQuotes();
+        } catch (error) {
+            this.showError('Failed to update quote. Please try again.');
+        }
+    }
+
+    async deleteQuote(quoteId) {
+        if (!confirm('Are you sure you want to delete this quote?')) return;
+
+        try {
+            const { error } = await supabase
+                .from('saved_quotes')
+                .delete()
+                .eq('id', quoteId);
+
+            if (error) {
+                this.showError('Failed to delete quote: ' + error.message);
+                return;
+            }
+
+            this.showSuccess('Quote deleted successfully!');
+            await this.loadSavedQuotes();
+        } catch (error) {
+            this.showError('Failed to delete quote. Please try again.');
+        }
+    }
+
+    showError(message) {
+        // Remove existing messages
+        this.clearMessages();
+
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.textContent = message;
+
+        // Add to current visible section
+        const activeSection = document.querySelector('.quote-container:not(.hidden), .auth-container:not(.hidden), .saved-quotes-container:not(.hidden)');
+        if (activeSection) {
+            activeSection.insertBefore(errorDiv, activeSection.firstChild);
+        }
+
+        setTimeout(() => errorDiv.remove(), 5000);
+    }
+
+    showSuccess(message) {
+        // Remove existing messages
+        this.clearMessages();
+
+        const successDiv = document.createElement('div');
+        successDiv.className = 'success-message';
+        successDiv.textContent = message;
+
+        // Add to current visible section
+        const activeSection = document.querySelector('.quote-container:not(.hidden), .auth-container:not(.hidden), .saved-quotes-container:not(.hidden)');
+        if (activeSection) {
+            activeSection.insertBefore(successDiv, activeSection.firstChild);
+        }
+
+        setTimeout(() => successDiv.remove(), 3000);
+    }
+
+    clearMessages() {
+        document.querySelectorAll('.error-message, .success-message').forEach(msg => msg.remove());
     }
 
     resetQuote() {
@@ -269,6 +523,7 @@ class VinylQuoteApp {
 }
 
 // Initialize the app when DOM is loaded
+let app;
 document.addEventListener('DOMContentLoaded', () => {
-    new VinylQuoteApp();
+    app = new VinylQuoteApp();
 });

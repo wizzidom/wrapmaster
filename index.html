@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kitchen Vinyl Wrapping Quotes</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div class="container">
@@ -41,7 +42,10 @@
         <div id="quote-section" class="quote-container hidden">
             <div class="header">
                 <h1>Kitchen Vinyl Wrapping Quote Calculator</h1>
-                <button id="logout-btn" class="logout-btn">Logout</button>
+                <div class="header-actions">
+                    <button id="saved-quotes-btn" class="saved-quotes-btn">My Saved Quotes</button>
+                    <button id="logout-btn" class="logout-btn">Logout</button>
+                </div>
             </div>
             
             <div class="calculator">
@@ -96,7 +100,32 @@
                         <p><strong>Transportation Cost:</strong> R<span id="result-transport-cost"></span></p>
                         <p class="total"><strong>Total Quote:</strong> R<span id="result-total"></span></p>
                     </div>
-                    <button id="new-quote-btn" class="new-quote-btn">New Quote</button>
+                    <div class="quote-actions">
+                        <input type="text" id="quote-name-input" placeholder="Enter quote name (optional)" class="quote-name-input">
+                        <button id="save-quote-btn" class="save-quote-btn">Save Quote</button>
+                        <button id="new-quote-btn" class="new-quote-btn">New Quote</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Saved Quotes Section -->
+        <div id="saved-quotes-section" class="saved-quotes-container hidden">
+            <div class="header">
+                <h1>My Saved Quotes</h1>
+                <div class="header-actions">
+                    <button id="back-to-calculator-btn" class="back-btn">Back to Calculator</button>
+                    <button id="logout-btn-saved" class="logout-btn">Logout</button>
+                </div>
+            </div>
+            
+            <div class="saved-quotes-content">
+                <div id="saved-quotes-list" class="saved-quotes-list">
+                    <!-- Saved quotes will be loaded here -->
+                </div>
+                <div id="no-quotes-message" class="no-quotes-message hidden">
+                    <p>You haven't saved any quotes yet.</p>
+                    <button id="create-first-quote-btn" class="create-quote-btn">Create Your First Quote</button>
                 </div>
             </div>
         </div>
