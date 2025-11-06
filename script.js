@@ -445,7 +445,7 @@ class VinylQuoteApp {
                     </div>
                     <div class="quote-detail">
                         <span>Duration:</span>
-                        <span>${quote.project_days} day(s)</span>
+                        <span>1 - ${quote.project_days} day(s)</span>
                     </div>
                 </div>
                 
@@ -966,7 +966,7 @@ class VinylQuoteApp {
         const projectDetails = [
             ['Doors/Sides:', quote.doors],
             ['Square Metres:', quote.square_metres],
-            ['Duration:', `${quote.project_days} day(s)`],
+            ['Duration:', `${quote.project_days} day(s) max`],
             ['Material:', quote.material_name],
             ['Color/Finish:', colorChosen]
         ];
