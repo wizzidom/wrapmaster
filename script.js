@@ -17,14 +17,21 @@ supabase.auth.getSession().then(({ data, error }) => {
     }
 });
 
-// User authentication and quote calculator functionality
+// User authentication and quote calculator functionalityJus
 class VinylQuoteApp {
     constructor() {
         this.currentUser = null;
         this.currentQuote = null;
         this.savedQuotes = [];
         this.filteredQuotes = [];
+        this.filteredHistory = [];
+        this.customers = [];
+        this.filteredCustomers = [];
+        this.customLineItems = [];
+        this.uploadedPhotos = [];
         this.calculatorMode = 'doors'; // 'doors' or 'sqm'
+        this.editingCustomerId = null;
+        this.currentMonth = new Date();
         this.init();
     }
 
@@ -45,17 +52,52 @@ class VinylQuoteApp {
         // Logout buttons
         document.getElementById('logout-btn').addEventListener('click', () => this.logout());
         document.getElementById('logout-btn-saved').addEventListener('click', () => this.logout());
+        document.getElementById('logout-btn-customers').addEventListener('click', () => this.logout());
+        document.getElementById('logout-btn-calendar').addEventListener('click', () => this.logout());
+        document.getElementById('logout-btn-history').addEventListener('click', () => this.logout());
 
-        // Navigation
-        document.getElementById('saved-quotes-btn').addEventListener('click', () => this.showSavedQuotes());
-        document.getElementById('back-to-calculator-btn').addEventListener('click', () => this.showQuoteSection());
+        // Navigation - Global nav buttons (accessible from all pages)
+        // From Calculator
+        document.getElementById('nav-customers-btn').addEventListener('click', () => this.showCustomersSection());
+        document.getElementById('nav-quotes-btn').addEventListener('click', () => this.showSavedQuotes());
+        document.getElementById('nav-calendar-btn').addEventListener('click', () => this.showCalendarSection());
+        document.getElementById('nav-history-btn').addEventListener('click', () => this.showHistorySection());
+        
+        // From Customers
+        document.getElementById('nav-calculator-btn-2').addEventListener('click', () => this.showQuoteSection());
+        document.getElementById('nav-quotes-btn-2').addEventListener('click', () => this.showSavedQuotes());
+        document.getElementById('nav-calendar-btn-2').addEventListener('click', () => this.showCalendarSection());
+        document.getElementById('nav-history-btn-2').addEventListener('click', () => this.showHistorySection());
+        
+        // From Calendar
+        document.getElementById('nav-calculator-btn-3').addEventListener('click', () => this.showQuoteSection());
+        document.getElementById('nav-customers-btn-3').addEventListener('click', () => this.showCustomersSection());
+        document.getElementById('nav-quotes-btn-3').addEventListener('click', () => this.showSavedQuotes());
+        document.getElementById('nav-history-btn-3').addEventListener('click', () => this.showHistorySection());
+        
+        // From History
+        document.getElementById('nav-calculator-btn-4').addEventListener('click', () => this.showQuoteSection());
+        document.getElementById('nav-customers-btn-4').addEventListener('click', () => this.showCustomersSection());
+        document.getElementById('nav-quotes-btn-4').addEventListener('click', () => this.showSavedQuotes());
+        document.getElementById('nav-calendar-btn-4').addEventListener('click', () => this.showCalendarSection());
+        
+        // From Saved Quotes
+        document.getElementById('nav-calculator-btn-5').addEventListener('click', () => this.showQuoteSection());
+        document.getElementById('nav-customers-btn-5').addEventListener('click', () => this.showCustomersSection());
+        document.getElementById('nav-calendar-btn-5').addEventListener('click', () => this.showCalendarSection());
+        document.getElementById('nav-history-btn-5').addEventListener('click', () => this.showHistorySection());
+        
+        // Other navigation
+        document.getElementById('view-calendar-btn').addEventListener('click', () => this.showCalendarSection());
         document.getElementById('create-first-quote-btn').addEventListener('click', () => this.showQuoteSection());
 
         // Search and filtering
         document.getElementById('quote-search').addEventListener('input', () => this.filterQuotes());
         document.getElementById('material-filter').addEventListener('change', () => this.filterQuotes());
+        document.getElementById('status-filter').addEventListener('change', () => this.filterQuotes());
         document.getElementById('date-filter').addEventListener('change', () => this.filterQuotes());
         document.getElementById('clear-filters-btn').addEventListener('click', () => this.clearFilters());
+        document.getElementById('customer-search').addEventListener('input', () => this.filterCustomers());
 
         // Export functionality
         document.getElementById('export-all-btn').addEventListener('click', () => this.exportToPDF('all'));
@@ -64,6 +106,30 @@ class VinylQuoteApp {
         // Calculator mode toggle
         document.getElementById('doors-mode-btn').addEventListener('click', () => this.switchToDoorsMode());
         document.getElementById('sqm-mode-btn').addEventListener('click', () => this.switchToSqmMode());
+
+        // Customer management
+        document.getElementById('customer-select').addEventListener('change', () => this.handleCustomerSelection());
+        document.getElementById('manage-customers-btn').addEventListener('click', () => this.showCustomersSection());
+        document.getElementById('add-customer-btn').addEventListener('click', () => this.showCustomerModal());
+        document.getElementById('customer-form').addEventListener('submit', (e) => this.saveCustomer(e));
+        document.getElementById('close-customer-modal').addEventListener('click', () => this.hideCustomerModal());
+        document.getElementById('cancel-customer-modal').addEventListener('click', () => this.hideCustomerModal());
+
+        // Custom line items
+        document.getElementById('add-custom-item-btn').addEventListener('click', () => this.addCustomLineItem());
+
+        // Photo upload
+        document.getElementById('upload-photo-btn').addEventListener('click', () => document.getElementById('photo-input').click());
+        document.getElementById('photo-input').addEventListener('change', (e) => this.handlePhotoUpload(e));
+
+        // Calendar
+        document.getElementById('calendar-month-select').addEventListener('change', () => this.renderCalendar());
+        document.getElementById('calendar-status-filter').addEventListener('change', () => this.renderCalendar());
+
+        // History
+        document.getElementById('history-search').addEventListener('input', () => this.filterHistory());
+        document.getElementById('history-date-filter').addEventListener('change', () => this.filterHistory());
+        document.getElementById('clear-history-filters-btn').addEventListener('click', () => this.clearHistoryFilters());
 
         // Quote calculator
         document.getElementById('doors-input').addEventListener('input', () => this.handleDoorsInput());
@@ -206,18 +272,62 @@ class VinylQuoteApp {
     showAuthSection() {
         document.getElementById('auth-section').classList.remove('hidden');
         document.getElementById('quote-section').classList.add('hidden');
+        document.getElementById('customers-section').classList.add('hidden');
+        document.getElementById('calendar-section').classList.add('hidden');
+        document.getElementById('history-section').classList.add('hidden');
         document.getElementById('saved-quotes-section').classList.add('hidden');
     }
 
-    showQuoteSection() {
+    async showQuoteSection() {
         document.getElementById('auth-section').classList.add('hidden');
         document.getElementById('quote-section').classList.remove('hidden');
+        document.getElementById('customers-section').classList.add('hidden');
+        document.getElementById('calendar-section').classList.add('hidden');
+        document.getElementById('history-section').classList.add('hidden');
         document.getElementById('saved-quotes-section').classList.add('hidden');
+        await this.loadCustomers();
+        this.populateCustomerDropdown();
+    }
+
+    async showCustomersSection() {
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('quote-section').classList.add('hidden');
+        document.getElementById('customers-section').classList.remove('hidden');
+        document.getElementById('calendar-section').classList.add('hidden');
+        document.getElementById('history-section').classList.add('hidden');
+        document.getElementById('saved-quotes-section').classList.add('hidden');
+        await this.loadCustomers();
+    }
+
+    async showCalendarSection() {
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('quote-section').classList.add('hidden');
+        document.getElementById('customers-section').classList.add('hidden');
+        document.getElementById('calendar-section').classList.remove('hidden');
+        document.getElementById('history-section').classList.add('hidden');
+        document.getElementById('saved-quotes-section').classList.add('hidden');
+        await this.loadSavedQuotes();
+        this.initializeCalendar();
+        this.renderCalendar();
+    }
+
+    async showHistorySection() {
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('quote-section').classList.add('hidden');
+        document.getElementById('customers-section').classList.add('hidden');
+        document.getElementById('calendar-section').classList.add('hidden');
+        document.getElementById('history-section').classList.remove('hidden');
+        document.getElementById('saved-quotes-section').classList.add('hidden');
+        await this.loadSavedQuotes();
+        this.renderHistory();
     }
 
     async showSavedQuotes() {
         document.getElementById('auth-section').classList.add('hidden');
         document.getElementById('quote-section').classList.add('hidden');
+        document.getElementById('customers-section').classList.add('hidden');
+        document.getElementById('calendar-section').classList.add('hidden');
+        document.getElementById('history-section').classList.add('hidden');
         document.getElementById('saved-quotes-section').classList.remove('hidden');
         await this.loadSavedQuotes();
     }
@@ -269,20 +379,114 @@ class VinylQuoteApp {
     handleMaterialSelection() {
         const selectedMaterial = document.querySelector('input[name="material"]:checked');
         const transportStep = document.getElementById('transport-step');
+        const customItemsStep = document.getElementById('custom-items-step');
+        const photoUploadStep = document.getElementById('photo-upload-step');
         const calculateBtn = document.getElementById('calculate-btn');
 
         if (selectedMaterial) {
             transportStep.style.display = 'block';
+            customItemsStep.style.display = 'block';
+            photoUploadStep.style.display = 'block';
             calculateBtn.style.display = 'block';
         } else {
             transportStep.style.display = 'none';
+            customItemsStep.style.display = 'none';
+            photoUploadStep.style.display = 'none';
             calculateBtn.style.display = 'none';
         }
     }
 
     handleTransportInput() {
-        // This method can be used for future validation if needed
-        // For now, it's just a placeholder to handle transport input changes
+        // Show custom items and photo upload steps when transport is visible
+        const transportStep = document.getElementById('transport-step');
+        const customItemsStep = document.getElementById('custom-items-step');
+        const photoUploadStep = document.getElementById('photo-upload-step');
+        if (transportStep.style.display !== 'none') {
+            customItemsStep.style.display = 'block';
+            photoUploadStep.style.display = 'block';
+        }
+    }
+
+    handleCustomerSelection() {
+        const customerId = document.getElementById('customer-select').value;
+        const customerInfo = document.getElementById('customer-info');
+        
+        if (customerId) {
+            const customer = this.customers.find(c => c.id === customerId);
+            if (customer) {
+                customerInfo.innerHTML = `
+                    <div class="customer-details">
+                        <p><strong>${customer.name}</strong></p>
+                        ${customer.phone ? `<p>📞 ${customer.phone}</p>` : ''}
+                        ${customer.email ? `<p>📧 ${customer.email}</p>` : ''}
+                        ${customer.address ? `<p>📍 ${customer.address}</p>` : ''}
+                    </div>
+                `;
+                customerInfo.classList.remove('hidden');
+            }
+        } else {
+            customerInfo.classList.add('hidden');
+        }
+    }
+
+    addCustomLineItem() {
+        const description = prompt('Enter item description:');
+        if (!description || description.trim() === '') return;
+
+        const amount = parseFloat(prompt('Enter amount (R):'));
+        if (isNaN(amount) || amount <= 0) {
+            this.showError('Please enter a valid amount');
+            return;
+        }
+
+        this.customLineItems.push({
+            description: description.trim(),
+            amount: amount
+        });
+
+        this.renderCustomLineItems();
+        this.updateCustomItemsTotal();
+    }
+
+    renderCustomLineItems() {
+        const container = document.getElementById('custom-items-list');
+        
+        if (this.customLineItems.length === 0) {
+            container.innerHTML = '<p class="no-items-text">No additional charges added</p>';
+            return;
+        }
+
+        container.innerHTML = this.customLineItems.map((item, index) => `
+            <div class="custom-line-item">
+                <span class="item-description">${item.description}</span>
+                <span class="item-amount">R${item.amount.toFixed(2)}</span>
+                <button class="remove-item-btn" onclick="app.removeCustomLineItem(${index})">×</button>
+            </div>
+        `).join('');
+    }
+
+    removeCustomLineItem(index) {
+        this.customLineItems.splice(index, 1);
+        this.renderCustomLineItems();
+        this.updateCustomItemsTotal();
+    }
+
+    updateCustomItemsTotal() {
+        const total = this.customLineItems.reduce((sum, item) => sum + item.amount, 0);
+        
+        if (total > 0 && this.currentQuote) {
+            this.currentQuote.customItemsTotal = total;
+            this.currentQuote.totalCost = 
+                this.currentQuote.materialCost + 
+                this.currentQuote.installationFee + 
+                this.currentQuote.foodCost + 
+                this.currentQuote.transportCost + 
+                total;
+            
+            document.getElementById('custom-items-result').style.display = 'block';
+            document.getElementById('result-custom-items').textContent = total.toFixed(2);
+            document.getElementById('result-total').textContent = this.currentQuote.totalCost.toFixed(2);
+        }
     }
 
     hideCalculateButton() {
@@ -332,7 +536,8 @@ class VinylQuoteApp {
         const materialCost = squareMetres * materialRate;
         const installationFee = doors * 95; // R95 per side
         const foodCost = projectDays * 300; // R300 per day for food
-        const totalCost = materialCost + installationFee + foodCost + transportCost;
+        const customItemsTotal = this.customLineItems.reduce((sum, item) => sum + item.amount, 0);
+        const totalCost = materialCost + installationFee + foodCost + transportCost + customItemsTotal;
 
         // Display results
         this.displayQuoteResult({
@@ -345,6 +550,7 @@ class VinylQuoteApp {
             installationFee,
             foodCost,
             transportCost,
+            customItemsTotal,
             totalCost
         });
     }
@@ -369,6 +575,14 @@ class VinylQuoteApp {
         document.getElementById('result-installation').textContent = quote.installationFee.toFixed(2);
         document.getElementById('result-food-cost').textContent = quote.foodCost.toFixed(2);
         document.getElementById('result-transport-cost').textContent = quote.transportCost.toFixed(2);
+        
+        if (quote.customItemsTotal > 0) {
+            document.getElementById('custom-items-result').style.display = 'block';
+            document.getElementById('result-custom-items').textContent = quote.customItemsTotal.toFixed(2);
+        } else {
+            document.getElementById('custom-items-result').style.display = 'none';
+        }
+        
         document.getElementById('result-total').textContent = quote.totalCost.toFixed(2);
 
         document.getElementById('quote-result').style.display = 'block';
@@ -385,12 +599,16 @@ class VinylQuoteApp {
 
         const quoteName = document.getElementById('quote-name-input').value.trim() ||
             `Quote ${new Date().toLocaleDateString()}`;
+        const customerId = document.getElementById('customer-select').value || null;
+        const status = document.getElementById('quote-status-select').value;
+        const scheduledDate = document.getElementById('scheduled-date-input').value || null;
 
         try {
-            const { data, error } = await supabase
+            const { data: quoteData, error: quoteError } = await supabase
                 .from('saved_quotes')
                 .insert([{
                     user_id: this.currentUser.id,
+                    customer_id: customerId,
                     doors: this.currentQuote.doors,
                     square_metres: this.currentQuote.squareMetres,
                     project_days: this.currentQuote.projectDays,
@@ -400,20 +618,756 @@ class VinylQuoteApp {
                     installation_fee: this.currentQuote.installationFee,
                     food_cost: this.currentQuote.foodCost,
                     transport_cost: this.currentQuote.transportCost,
+                    custom_items_total: this.currentQuote.customItemsTotal || 0,
                     total_cost: this.currentQuote.totalCost,
-                    quote_name: quoteName
-                }]);
+                    quote_name: quoteName,
+                    status: status,
+                    scheduled_date: scheduledDate
+                }])
+                .select();
 
-            if (error) {
-                this.showError('Failed to save quote: ' + error.message);
+            if (quoteError) {
+                this.showError('Failed to save quote: ' + quoteError.message);
                 return;
+            }
+
+            const quoteId = quoteData[0].id;
+
+            // Save custom line items if any
+            if (this.customLineItems.length > 0) {
+                const lineItemsToInsert = this.customLineItems.map(item => ({
+                    quote_id: quoteId,
+                    description: item.description,
+                    amount: item.amount
+                }));
+
+                const { error: itemsError } = await supabase
+                    .from('custom_line_items')
+                    .insert(lineItemsToInsert);
+
+                if (itemsError) {
+                    console.error('Failed to save custom line items:', itemsError);
+                }
+            }
+
+            // Upload photos if any
+            if (this.uploadedPhotos.length > 0) {
+                const photoRecords = await this.uploadPhotosToStorage(quoteId);
+                
+                if (photoRecords.length > 0) {
+                    const photosToInsert = photoRecords.map(photo => ({
+                        quote_id: quoteId,
+                        ...photo
+                    }));
+
+                    const { error: photosError } = await supabase
+                        .from('quote_photos')
+                        .insert(photosToInsert);
+
+                    if (photosError) {
+                        console.error('Failed to save photo records:', photosError);
+                    }
+                }
             }
 
             this.showSuccess('Quote saved successfully!');
             document.getElementById('quote-name-input').value = '';
+            document.getElementById('quote-status-select').value = 'pending';
+            document.getElementById('scheduled-date-input').value = '';
+            
+            // Clear photos
+            this.uploadedPhotos.forEach(photo => URL.revokeObjectURL(photo.preview));
+            this.uploadedPhotos = [];
+            this.renderPhotoPreview();
         } catch (error) {
             this.showError('Failed to save quote. Please try again.');
         }
+    }
+
+    // Customer Management Methods
+    async loadCustomers() {
+        if (!this.currentUser) return;
+
+        try {
+            const { data, error } = await supabase
+                .from('customers')
+                .select('*')
+                .eq('user_id', this.currentUser.id)
+                .order('name', { ascending: true });
+
+            if (error) {
+                this.showError('Failed to load customers: ' + error.message);
+                return;
+            }
+
+            this.customers = data || [];
+            this.filteredCustomers = [...this.customers];
+            this.renderCustomers();
+        } catch (error) {
+            this.showError('Failed to load customers. Please try again.');
+        }
+    }
+
+    populateCustomerDropdown() {
+        const select = document.getElementById('customer-select');
+        select.innerHTML = '<option value="">-- New Customer --</option>';
+        
+        this.customers.forEach(customer => {
+            const option = document.createElement('option');
+            option.value = customer.id;
+            option.textContent = customer.name;
+            select.appendChild(option);
+        });
+    }
+
+    renderCustomers() {
+        const container = document.getElementById('customers-list');
+        const noCustomersMessage = document.getElementById('no-customers-message');
+
+        if (this.customers.length === 0) {
+            container.innerHTML = '';
+            noCustomersMessage.classList.remove('hidden');
+            return;
+        }
+
+        noCustomersMessage.classList.add('hidden');
+
+        if (this.filteredCustomers.length === 0) {
+            container.innerHTML = `
+                <div class="no-results-message">
+                    <p>No customers match your search.</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = this.filteredCustomers.map(customer => `
+            <div class="customer-item">
+                <div class="customer-header">
+                    <div class="customer-name">${customer.name}</div>
+                    <div class="customer-actions">
+                        <button class="edit-customer-btn" onclick="app.editCustomer('${customer.id}')">Edit</button>
+                        <button class="delete-customer-btn" onclick="app.deleteCustomer('${customer.id}')">Delete</button>
+                    </div>
+                </div>
+                <div class="customer-details">
+                    ${customer.phone ? `<p>📞 ${customer.phone}</p>` : ''}
+                    ${customer.email ? `<p>📧 ${customer.email}</p>` : ''}
+                    ${customer.address ? `<p>📍 ${customer.address}</p>` : ''}
+                    ${customer.notes ? `<p>📝 ${customer.notes}</p>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    filterCustomers() {
+        const searchTerm = document.getElementById('customer-search').value.toLowerCase();
+        
+        this.filteredCustomers = this.customers.filter(customer => {
+            return customer.name.toLowerCase().includes(searchTerm) ||
+                   (customer.phone && customer.phone.includes(searchTerm)) ||
+                   (customer.email && customer.email.toLowerCase().includes(searchTerm));
+        });
+        
+        this.renderCustomers();
+    }
+
+    showCustomerModal(customerId = null) {
+        const modal = document.getElementById('customer-modal');
+        const title = document.getElementById('customer-modal-title');
+        
+        if (customerId) {
+            const customer = this.customers.find(c => c.id === customerId);
+            if (customer) {
+                title.textContent = 'Edit Customer';
+                document.getElementById('customer-id').value = customer.id;
+                document.getElementById('customer-name').value = customer.name;
+                document.getElementById('customer-phone').value = customer.phone || '';
+                document.getElementById('customer-email').value = customer.email || '';
+                document.getElementById('customer-address').value = customer.address || '';
+                document.getElementById('customer-notes').value = customer.notes || '';
+            }
+        } else {
+            title.textContent = 'Add Customer';
+            document.getElementById('customer-form').reset();
+            document.getElementById('customer-id').value = '';
+        }
+        
+        modal.classList.remove('hidden');
+    }
+
+    hideCustomerModal() {
+        document.getElementById('customer-modal').classList.add('hidden');
+        document.getElementById('customer-form').reset();
+    }
+
+    async saveCustomer(e) {
+        e.preventDefault();
+        
+        const customerId = document.getElementById('customer-id').value;
+        const customerData = {
+            name: document.getElementById('customer-name').value.trim(),
+            phone: document.getElementById('customer-phone').value.trim() || null,
+            email: document.getElementById('customer-email').value.trim() || null,
+            address: document.getElementById('customer-address').value.trim() || null,
+            notes: document.getElementById('customer-notes').value.trim() || null
+        };
+
+        if (!customerData.name) {
+            this.showError('Customer name is required');
+            return;
+        }
+
+        try {
+            if (customerId) {
+                // Update existing customer
+                const { error } = await supabase
+                    .from('customers')
+                    .update(customerData)
+                    .eq('id', customerId);
+
+                if (error) {
+                    this.showError('Failed to update customer: ' + error.message);
+                    return;
+                }
+
+                this.showSuccess('Customer updated successfully!');
+            } else {
+                // Create new customer
+                const { error } = await supabase
+                    .from('customers')
+                    .insert([{
+                        ...customerData,
+                        user_id: this.currentUser.id
+                    }]);
+
+                if (error) {
+                    this.showError('Failed to create customer: ' + error.message);
+                    return;
+                }
+
+                this.showSuccess('Customer created successfully!');
+            }
+
+            this.hideCustomerModal();
+            await this.loadCustomers();
+            this.populateCustomerDropdown();
+        } catch (error) {
+            this.showError('Failed to save customer. Please try again.');
+        }
+    }
+
+    editCustomer(customerId) {
+        this.showCustomerModal(customerId);
+    }
+
+    async deleteCustomer(customerId) {
+        if (!confirm('Are you sure you want to delete this customer? This will not delete their quotes.')) return;
+
+        try {
+            const { error} = await supabase
+                .from('customers')
+                .delete()
+                .eq('id', customerId);
+
+            if (error) {
+                this.showError('Failed to delete customer: ' + error.message);
+                return;
+            }
+
+            this.showSuccess('Customer deleted successfully!');
+            await this.loadCustomers();
+            this.populateCustomerDropdown();
+        } catch (error) {
+            this.showError('Failed to delete customer. Please try again.');
+        }
+    }
+
+    // Photo Upload Methods
+    async handlePhotoUpload(event) {
+        const files = Array.from(event.target.files);
+        if (files.length === 0) return;
+
+        for (const file of files) {
+            if (file.size > 5 * 1024 * 1024) {
+                this.showError(`${file.name} is too large. Max size is 5MB.`);
+                continue;
+            }
+
+            this.uploadedPhotos.push({
+                file: file,
+                preview: URL.createObjectURL(file),
+                name: file.name,
+                size: file.size
+            });
+        }
+
+        this.renderPhotoPreview();
+        event.target.value = ''; // Reset input
+    }
+
+    renderPhotoPreview() {
+        const container = document.getElementById('photo-preview-list');
+        
+        if (this.uploadedPhotos.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = this.uploadedPhotos.map((photo, index) => `
+            <div class="photo-preview-item">
+                <img src="${photo.preview}" alt="${photo.name}">
+                <div class="photo-info">
+                    <span class="photo-name">${photo.name}</span>
+                    <span class="photo-size">${(photo.size / 1024).toFixed(1)} KB</span>
+                </div>
+                <button class="remove-photo-btn" onclick="app.removePhoto(${index})">×</button>
+            </div>
+        `).join('');
+    }
+
+    removePhoto(index) {
+        URL.revokeObjectURL(this.uploadedPhotos[index].preview);
+        this.uploadedPhotos.splice(index, 1);
+        this.renderPhotoPreview();
+    }
+
+    async uploadPhotosToStorage(quoteId) {
+        if (this.uploadedPhotos.length === 0) return [];
+
+        const uploadedUrls = [];
+
+        for (const photo of this.uploadedPhotos) {
+            const fileName = `${quoteId}/${Date.now()}_${photo.name}`;
+            
+            try {
+                const { data, error } = await supabase.storage
+                    .from('quote-photos')
+                    .upload(fileName, photo.file);
+
+                if (error) {
+                    console.error('Photo upload error:', error);
+                    continue;
+                }
+
+                const { data: { publicUrl } } = supabase.storage
+                    .from('quote-photos')
+                    .getPublicUrl(fileName);
+
+                uploadedUrls.push({
+                    photo_url: publicUrl,
+                    photo_name: photo.name,
+                    file_size: photo.size
+                });
+            } catch (error) {
+                console.error('Photo upload failed:', error);
+            }
+        }
+
+        return uploadedUrls;
+    }
+
+    // Calendar Methods
+    initializeCalendar() {
+        const monthSelect = document.getElementById('calendar-month-select');
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        monthSelect.value = `${year}-${month}`;
+    }
+
+    renderCalendar() {
+        const monthSelect = document.getElementById('calendar-month-select');
+        const statusFilter = document.getElementById('calendar-status-filter').value;
+        const selectedMonth = new Date(monthSelect.value + '-01');
+        
+        const scheduledQuotes = this.savedQuotes.filter(quote => {
+            if (!quote.scheduled_date) return false;
+            
+            // Exclude completed projects from calendar
+            if (quote.status === 'completed') return false;
+            
+            const quoteDate = new Date(quote.scheduled_date);
+            const sameMonth = quoteDate.getMonth() === selectedMonth.getMonth() &&
+                            quoteDate.getFullYear() === selectedMonth.getFullYear();
+            
+            if (!sameMonth) return false;
+            
+            if (statusFilter === 'accepted') return quote.status === 'accepted';
+            
+            return true;
+        });
+
+        this.renderScheduledQuotesList(scheduledQuotes, selectedMonth);
+    }
+
+    renderScheduledQuotesList(quotes, month) {
+        const container = document.getElementById('scheduled-quotes-list');
+        
+        if (quotes.length === 0) {
+            container.innerHTML = `
+                <div class="no-scheduled-quotes">
+                    <p>No scheduled projects for ${month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Group by date
+        const groupedByDate = {};
+        quotes.forEach(quote => {
+            const date = quote.scheduled_date;
+            if (!groupedByDate[date]) {
+                groupedByDate[date] = [];
+            }
+            groupedByDate[date].push(quote);
+        });
+
+        // Sort dates
+        const sortedDates = Object.keys(groupedByDate).sort();
+
+        container.innerHTML = `
+            <h3>Scheduled Projects - ${month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
+            ${sortedDates.map(date => {
+                const dateObj = new Date(date + 'T00:00:00');
+                const dayQuotes = groupedByDate[date];
+                
+                return `
+                    <div class="calendar-day-group">
+                        <div class="calendar-day-header">
+                            <span class="calendar-date">${dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+                            <span class="calendar-count">${dayQuotes.length} project${dayQuotes.length > 1 ? 's' : ''}</span>
+                        </div>
+                        <div class="calendar-day-quotes">
+                            ${dayQuotes.map(quote => `
+                                <div class="calendar-quote-item">
+                                    <div class="calendar-quote-info">
+                                        <span class="calendar-quote-name">${quote.quote_name}</span>
+                                        <span class="status-badge status-${quote.status}">${this.getStatusLabel(quote.status)}</span>
+                                    </div>
+                                    <div class="calendar-quote-details">
+                                        <span>${quote.doors} doors</span>
+                                        <span>R${parseFloat(quote.total_cost).toFixed(2)}</span>
+                                    </div>
+                                    <button class="view-quote-btn" onclick="app.viewQuoteFromCalendar('${quote.id}')">View Details</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        `;
+    }
+
+    viewQuoteFromCalendar(quoteId) {
+        // Navigate to saved quotes and highlight the quote
+        this.showSavedQuotes();
+        setTimeout(() => {
+            const quoteElement = document.querySelector(`[data-quote-id="${quoteId}"]`);
+            if (quoteElement) {
+                quoteElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                quoteElement.style.animation = 'highlight 2s';
+            }
+        }, 300);
+    }
+
+    // History Methods
+    renderHistory() {
+        const completedQuotes = this.savedQuotes.filter(q => q.status === 'completed');
+        this.filteredHistory = [...completedQuotes];
+        this.displayHistory();
+    }
+
+    filterHistory() {
+        const searchTerm = document.getElementById('history-search').value.toLowerCase();
+        const dateFilter = document.getElementById('history-date-filter').value;
+        
+        const completedQuotes = this.savedQuotes.filter(q => q.status === 'completed');
+        
+        this.filteredHistory = completedQuotes.filter(quote => {
+            // Search filter
+            const matchesSearch = !searchTerm ||
+                quote.quote_name.toLowerCase().includes(searchTerm) ||
+                quote.material_name.toLowerCase().includes(searchTerm);
+            
+            // Date filter
+            const matchesDate = this.matchesHistoryDateFilter(quote.updated_at || quote.created_at, dateFilter);
+            
+            return matchesSearch && matchesDate;
+        });
+        
+        this.displayHistory();
+    }
+
+    matchesHistoryDateFilter(dateString, filter) {
+        if (!filter) return true;
+        
+        const quoteDate = new Date(dateString);
+        const now = new Date();
+        
+        switch (filter) {
+            case 'week':
+                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                return quoteDate >= weekAgo;
+            case 'month':
+                const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                return quoteDate >= monthAgo;
+            case '3months':
+                const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+                return quoteDate >= threeMonthsAgo;
+            case 'year':
+                return quoteDate.getFullYear() === now.getFullYear();
+            default:
+                return true;
+        }
+    }
+
+    displayHistory() {
+        const container = document.getElementById('history-list');
+        const noHistoryMessage = document.getElementById('no-history-message');
+        
+        // Calculate stats
+        const totalCompleted = this.filteredHistory.length;
+        const totalRevenue = this.filteredHistory.reduce((sum, q) => sum + parseFloat(q.total_cost), 0);
+        const avgProjectValue = totalCompleted > 0 ? totalRevenue / totalCompleted : 0;
+        
+        document.getElementById('total-completed').textContent = totalCompleted;
+        document.getElementById('total-revenue').textContent = `R${totalRevenue.toFixed(2)}`;
+        document.getElementById('avg-project-value').textContent = `R${avgProjectValue.toFixed(2)}`;
+        
+        if (this.filteredHistory.length === 0) {
+            container.innerHTML = '';
+            noHistoryMessage.classList.remove('hidden');
+            return;
+        }
+        
+        noHistoryMessage.classList.add('hidden');
+        
+        container.innerHTML = this.filteredHistory.map(quote => `
+            <div class="history-item">
+                <div class="history-header">
+                    <div class="history-title">${quote.quote_name}</div>
+                    <div class="history-date">Completed: ${new Date(quote.updated_at || quote.created_at).toLocaleDateString()}</div>
+                </div>
+                
+                <div class="history-details">
+                    <div class="history-detail">
+                        <span>📅 Scheduled:</span>
+                        <span>${quote.scheduled_date ? new Date(quote.scheduled_date).toLocaleDateString() : 'Not scheduled'}</span>
+                    </div>
+                    <div class="history-detail">
+                        <span>🚪 Doors:</span>
+                        <span>${quote.doors}</span>
+                    </div>
+                    <div class="history-detail">
+                        <span>📐 Square Metres:</span>
+                        <span>${quote.square_metres}</span>
+                    </div>
+                    <div class="history-detail">
+                        <span>🎨 Material:</span>
+                        <span>${quote.material_name}</span>
+                    </div>
+                    <div class="history-detail">
+                        <span>💰 Total:</span>
+                        <span class="history-total">R${parseFloat(quote.total_cost).toFixed(2)}</span>
+                    </div>
+                    <div class="history-detail">
+                        <span>💳 Payment:</span>
+                        <span class="payment-badge payment-${quote.payment_status || 'unpaid'}">${this.getPaymentStatusLabel(quote.payment_status)}</span>
+                    </div>
+                </div>
+                
+                <div class="history-actions">
+                    <button class="view-history-btn" onclick="app.viewHistoryDetails('${quote.id}')">View Full Details</button>
+                    <button class="export-history-btn" onclick="app.exportSingleQuote('${quote.id}')">Export PDF</button>
+                    ${quote.invoice_number ? `<button class="invoice-history-btn" onclick="app.generateInvoice('${quote.id}')">View Invoice</button>` : ''}
+                    <button class="delete-history-btn" onclick="app.deleteCompletedProject('${quote.id}')">🗑️ Delete</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    getPaymentStatusLabel(status) {
+        const labels = {
+            'paid': 'Fully Paid',
+            'partial': 'Partially Paid',
+            'unpaid': 'Unpaid'
+        };
+        return labels[status] || 'Unpaid';
+    }
+
+    viewHistoryDetails(quoteId) {
+        // Navigate to saved quotes and highlight the quote
+        this.showSavedQuotes();
+        setTimeout(() => {
+            const quoteElement = document.querySelector(`[data-quote-id="${quoteId}"]`);
+            if (quoteElement) {
+                quoteElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                quoteElement.style.animation = 'highlight 2s';
+            }
+        }, 300);
+    }
+
+    clearHistoryFilters() {
+        document.getElementById('history-search').value = '';
+        document.getElementById('history-date-filter').value = '';
+        this.renderHistory();
+    }
+
+    async deleteCompletedProject(quoteId) {
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) return;
+
+        if (!confirm(`Are you sure you want to permanently delete "${quote.quote_name}"?\n\nThis will delete:\n- The quote\n- All photos\n- All custom line items\n- Invoice records\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            // Delete the quote (cascade will handle photos and line items)
+            const { error } = await supabase
+                .from('saved_quotes')
+                .delete()
+                .eq('id', quoteId);
+
+            if (error) {
+                this.showError('Failed to delete project: ' + error.message);
+                return;
+            }
+
+            this.showSuccess('Completed project deleted successfully!');
+            await this.loadSavedQuotes();
+            this.renderHistory();
+        } catch (error) {
+            this.showError('Failed to delete project. Please try again.');
+        }
+    }
+
+    // Invoice Methods
+    async generateInvoice(quoteId) {
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) return;
+
+        if (quote.status !== 'accepted' && quote.status !== 'completed') {
+            if (!confirm('This quote is not accepted yet. Generate invoice anyway?')) {
+                return;
+            }
+        }
+
+        // Generate invoice number if not exists
+        let invoiceNumber = quote.invoice_number;
+        if (!invoiceNumber) {
+            invoiceNumber = `INV-${Date.now()}`;
+            
+            const { error } = await supabase
+                .from('saved_quotes')
+                .update({ invoice_number: invoiceNumber })
+                .eq('id', quoteId);
+
+            if (error) {
+                this.showError('Failed to generate invoice number');
+                return;
+            }
+        }
+
+        // Show invoice modal or generate PDF
+        this.showInvoiceModal(quote, invoiceNumber);
+    }
+
+    showInvoiceModal(quote, invoiceNumber) {
+        const depositAmount = (quote.total_cost * 0.5).toFixed(2);
+        const remainingAmount = (quote.total_cost - (quote.deposit_paid || 0)).toFixed(2);
+
+        const modalHTML = `
+            <div class="modal-overlay" id="invoice-modal">
+                <div class="modal-content invoice-modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title">Invoice: ${invoiceNumber}</h2>
+                        <button class="close-modal-btn" onclick="app.closeInvoiceModal()">&times;</button>
+                    </div>
+                    <div class="invoice-details">
+                        <h3>${quote.quote_name}</h3>
+                        <p><strong>Total Amount:</strong> R${parseFloat(quote.total_cost).toFixed(2)}</p>
+                        <p><strong>50% Deposit:</strong> R${depositAmount}</p>
+                        <p><strong>Deposit Paid:</strong> R${(quote.deposit_paid || 0).toFixed(2)}</p>
+                        <p><strong>Final Payment Paid:</strong> R${(quote.final_payment_paid || 0).toFixed(2)}</p>
+                        <p class="remaining-amount"><strong>Amount Due:</strong> R${remainingAmount}</p>
+                        
+                        <div class="payment-actions">
+                            <h4>Record Payment:</h4>
+                            <input type="number" id="payment-amount" placeholder="Amount" step="0.01" min="0">
+                            <select id="payment-type">
+                                <option value="deposit">Deposit Payment</option>
+                                <option value="final">Final Payment</option>
+                            </select>
+                            <button onclick="app.recordPayment('${quote.id}')" class="modal-save-btn">Record Payment</button>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button onclick="app.exportInvoicePDF('${quote.id}')" class="modal-save-btn">Export Invoice PDF</button>
+                        <button onclick="app.closeInvoiceModal()" class="modal-cancel-btn">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+    }
+
+    closeInvoiceModal() {
+        const modal = document.getElementById('invoice-modal');
+        if (modal) modal.remove();
+    }
+
+    async recordPayment(quoteId) {
+        const amount = parseFloat(document.getElementById('payment-amount').value);
+        const paymentType = document.getElementById('payment-type').value;
+
+        if (isNaN(amount) || amount <= 0) {
+            this.showError('Please enter a valid payment amount');
+            return;
+        }
+
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) return;
+
+        const updateData = {};
+        
+        if (paymentType === 'deposit') {
+            updateData.deposit_paid = (quote.deposit_paid || 0) + amount;
+        } else {
+            updateData.final_payment_paid = (quote.final_payment_paid || 0) + amount;
+        }
+
+        // Update payment status
+        const totalPaid = (quote.deposit_paid || 0) + (quote.final_payment_paid || 0) + amount;
+        if (totalPaid >= quote.total_cost) {
+            updateData.payment_status = 'paid';
+        } else if (totalPaid > 0) {
+            updateData.payment_status = 'partial';
+        }
+
+        try {
+            const { error } = await supabase
+                .from('saved_quotes')
+                .update(updateData)
+                .eq('id', quoteId);
+
+            if (error) {
+                this.showError('Failed to record payment: ' + error.message);
+                return;
+            }
+
+            this.showSuccess('Payment recorded successfully!');
+            this.closeInvoiceModal();
+            await this.loadSavedQuotes();
+        } catch (error) {
+            this.showError('Failed to record payment. Please try again.');
+        }
+    }
+
+    exportInvoicePDF(quoteId) {
+        // This will use the existing PDF export but formatted as an invoice
+        this.exportSingleQuote(quoteId, true); // Pass true for invoice mode
     }
 
     async loadSavedQuotes() {
@@ -432,7 +1386,8 @@ class VinylQuoteApp {
             }
 
             this.savedQuotes = data || [];
-            this.filteredQuotes = [...this.savedQuotes];
+            // Exclude completed quotes from saved quotes view
+            this.filteredQuotes = this.savedQuotes.filter(q => q.status !== 'completed');
             this.renderSavedQuotes();
         } catch (error) {
             this.showError('Failed to load saved quotes. Please try again.');
@@ -480,7 +1435,10 @@ class VinylQuoteApp {
         container.innerHTML = this.filteredQuotes.map(quote => `
             <div class="saved-quote-item" data-quote-id="${quote.id}">
                 <div class="quote-header">
-                    <div class="quote-title">${quote.quote_name}</div>
+                    <div class="quote-title-row">
+                        <div class="quote-title">${quote.quote_name}</div>
+                        <span class="status-badge status-${quote.status || 'pending'}">${this.getStatusLabel(quote.status || 'pending')}</span>
+                    </div>
                     <div class="quote-date">${new Date(quote.created_at).toLocaleDateString()}</div>
                 </div>
                 
@@ -501,19 +1459,46 @@ class VinylQuoteApp {
                         <span>Duration:</span>
                         <span>1 - ${quote.project_days} day(s)</span>
                     </div>
+                    ${quote.scheduled_date ? `
+                    <div class="quote-detail scheduled-date-detail">
+                        <span>📅 Scheduled:</span>
+                        <span>${new Date(quote.scheduled_date).toLocaleDateString()}</span>
+                    </div>
+                    ` : ''}
                 </div>
                 
                 <div class="quote-total">
                     Total: R${parseFloat(quote.total_cost).toFixed(2)}
+                    ${quote.payment_status && quote.payment_status !== 'unpaid' ? `
+                        <span class="payment-badge payment-${quote.payment_status}">${quote.payment_status === 'paid' ? 'Paid' : 'Partial'}</span>
+                    ` : ''}
                 </div>
                 
                 <div class="quote-actions-saved">
+                    <select class="status-change-select" onchange="app.changeQuoteStatus('${quote.id}', this.value)">
+                        <option value="">Change Status...</option>
+                        <option value="pending" ${quote.status === 'pending' ? 'disabled' : ''}>Pending</option>
+                        <option value="accepted" ${quote.status === 'accepted' ? 'disabled' : ''}>Accepted</option>
+                        <option value="rejected" ${quote.status === 'rejected' ? 'disabled' : ''}>Rejected</option>
+                        <option value="completed" ${quote.status === 'completed' ? 'disabled' : ''}>Completed</option>
+                    </select>
+                    <button class="invoice-btn" onclick="app.generateInvoice('${quote.id}')">💰 Invoice</button>
                     <button class="export-individual-btn" onclick="app.exportSingleQuote('${quote.id}')">Export PDF</button>
                     <button class="edit-quote-btn" onclick="app.editQuote('${quote.id}')">Edit Name</button>
                     <button class="delete-quote-btn" onclick="app.deleteQuote('${quote.id}')">Delete</button>
                 </div>
             </div>
         `).join('');
+    }
+
+    getStatusLabel(status) {
+        const labels = {
+            'pending': 'Pending',
+            'accepted': 'Accepted',
+            'rejected': 'Rejected',
+            'completed': 'Completed'
+        };
+        return labels[status] || 'Pending';
     }
 
     async editQuote(quoteId) {
@@ -538,6 +1523,49 @@ class VinylQuoteApp {
             await this.loadSavedQuotes();
         } catch (error) {
             this.showError('Failed to update quote. Please try again.');
+        }
+    }
+
+    async changeQuoteStatus(quoteId, newStatus) {
+        if (!newStatus) return;
+
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) return;
+
+        const statusLabels = {
+            'pending': 'Pending',
+            'accepted': 'Accepted',
+            'rejected': 'Rejected',
+            'completed': 'Completed'
+        };
+
+        // Special confirmation for marking as completed
+        if (newStatus === 'completed') {
+            if (!confirm('Mark this project as completed? It will be moved to History.')) {
+                return;
+            }
+        }
+
+        try {
+            const { error } = await supabase
+                .from('saved_quotes')
+                .update({ status: newStatus })
+                .eq('id', quoteId);
+
+            if (error) {
+                this.showError('Failed to update status: ' + error.message);
+                return;
+            }
+
+            if (newStatus === 'completed') {
+                this.showSuccess('Project marked as completed and moved to History!');
+            } else {
+                this.showSuccess(`Quote status changed to ${statusLabels[newStatus]}!`);
+            }
+            
+            await this.loadSavedQuotes();
+        } catch (error) {
+            this.showError('Failed to update status. Please try again.');
         }
     }
 
@@ -606,6 +1634,8 @@ class VinylQuoteApp {
         document.getElementById('transport-input').value = '';
         document.getElementById('material-step').style.display = 'none';
         document.getElementById('transport-step').style.display = 'none';
+        document.getElementById('custom-items-step').style.display = 'none';
+        document.getElementById('photo-upload-step').style.display = 'none';
         document.getElementById('calculate-btn').style.display = 'none';
         document.getElementById('quote-result').style.display = 'none';
 
@@ -613,15 +1643,31 @@ class VinylQuoteApp {
         document.querySelectorAll('input[name="material"]').forEach(radio => {
             radio.checked = false;
         });
+
+        // Clear custom line items
+        this.customLineItems = [];
+        this.renderCustomLineItems();
+
+        // Clear photos
+        this.uploadedPhotos.forEach(photo => URL.revokeObjectURL(photo.preview));
+        this.uploadedPhotos = [];
+        this.renderPhotoPreview();
+
+        // Clear scheduled date
+        document.getElementById('scheduled-date-input').value = '';
     }
 
     // Search and Filter Methods
     filterQuotes() {
         const searchTerm = document.getElementById('quote-search').value.toLowerCase();
         const materialFilter = document.getElementById('material-filter').value;
+        const statusFilter = document.getElementById('status-filter').value;
         const dateFilter = document.getElementById('date-filter').value;
 
         this.filteredQuotes = this.savedQuotes.filter(quote => {
+            // Exclude completed quotes - they go to History
+            if (quote.status === 'completed') return false;
+
             // Search filter
             const matchesSearch = !searchTerm ||
                 quote.quote_name.toLowerCase().includes(searchTerm) ||
@@ -630,10 +1676,13 @@ class VinylQuoteApp {
             // Material filter
             const matchesMaterial = !materialFilter || quote.material_name === materialFilter;
 
+            // Status filter
+            const matchesStatus = !statusFilter || quote.status === statusFilter;
+
             // Date filter
             const matchesDate = this.matchesDateFilter(quote.created_at, dateFilter);
 
-            return matchesSearch && matchesMaterial && matchesDate;
+            return matchesSearch && matchesMaterial && matchesStatus && matchesDate;
         });
 
         this.renderSavedQuotes();
@@ -664,8 +1713,10 @@ class VinylQuoteApp {
     clearFilters() {
         document.getElementById('quote-search').value = '';
         document.getElementById('material-filter').value = '';
+        document.getElementById('status-filter').value = '';
         document.getElementById('date-filter').value = '';
-        this.filteredQuotes = [...this.savedQuotes];
+        // Exclude completed quotes from saved quotes view
+        this.filteredQuotes = this.savedQuotes.filter(q => q.status !== 'completed');
         this.renderSavedQuotes();
     }
 

@@ -46,12 +46,27 @@
             <div class="header">
                 <h1>Kitchen Vinyl Wrapping Quote Calculator</h1>
                 <div class="header-actions">
-                    <button id="saved-quotes-btn" class="saved-quotes-btn">My Saved Quotes</button>
+                    <button id="nav-customers-btn" class="nav-btn">👥 Customers</button>
+                    <button id="nav-quotes-btn" class="nav-btn">📄 Quotes</button>
+                    <button id="nav-calendar-btn" class="nav-btn">📅 Calendar</button>
+                    <button id="nav-history-btn" class="nav-btn">📋 History</button>
                     <button id="logout-btn" class="logout-btn">Logout</button>
                 </div>
             </div>
 
             <div class="calculator">
+                <!-- Customer Selection -->
+                <div class="step customer-selection">
+                    <label for="customer-select">Select Customer (Optional):</label>
+                    <div class="customer-select-wrapper">
+                        <select id="customer-select" class="customer-select">
+                            <option value="">-- New Customer --</option>
+                        </select>
+                        <button id="manage-customers-btn" class="manage-customers-btn">Manage</button>
+                    </div>
+                    <div id="customer-info" class="customer-info hidden"></div>
+                </div>
+
                 <!-- Calculator Mode Toggle -->
                 <div class="calculator-mode-toggle">
                     <button id="doors-mode-btn" class="mode-btn active">Calculate by Doors</button>
@@ -102,6 +117,24 @@
                         placeholder="Enter transportation cost (R0 if none)">
                 </div>
 
+                <!-- Custom Line Items -->
+                <div class="step" id="custom-items-step" style="display: none;">
+                    <h3>Additional Charges (Optional):</h3>
+                    <div id="custom-items-list"></div>
+                    <button type="button" id="add-custom-item-btn" class="add-item-btn">+ Add Custom Item</button>
+                </div>
+
+                <!-- Photo Upload -->
+                <div class="step" id="photo-upload-step" style="display: none;">
+                    <h3>Photos (Optional):</h3>
+                    <div class="photo-upload-area">
+                        <input type="file" id="photo-input" accept="image/*" multiple style="display: none;">
+                        <button type="button" id="upload-photo-btn" class="upload-photo-btn">📷 Upload Photos</button>
+                        <p class="photo-hint">Add before/after photos or reference images</p>
+                    </div>
+                    <div id="photo-preview-list" class="photo-preview-list"></div>
+                </div>
+
                 <button id="calculate-btn" class="calculate-btn" style="display: none;">Calculate Quote</button>
 
                 <div id="quote-result" class="quote-result" style="display: none;">
@@ -115,14 +148,129 @@
                         <p><strong>Installation Fee:</strong> R<span id="result-installation"></span></p>
                         <p><strong>Food Cost:</strong> R<span id="result-food-cost"></span></p>
                         <p><strong>Transportation Cost:</strong> R<span id="result-transport-cost"></span></p>
+                        <p id="custom-items-result" style="display: none;"><strong>Additional Charges:</strong> R<span id="result-custom-items"></span></p>
                         <p class="total"><strong>Total Quote:</strong> R<span id="result-total"></span></p>
                     </div>
                     <div class="quote-actions">
                         <input type="text" id="quote-name-input" placeholder="Enter quote name (optional)"
                             class="quote-name-input">
+                        <div class="quote-actions-row">
+                            <select id="quote-status-select" class="quote-status-select">
+                                <option value="pending">Pending</option>
+                                <option value="accepted">Accepted</option>
+                                <option value="rejected">Rejected</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                            <input type="date" id="scheduled-date-input" class="scheduled-date-input" placeholder="Schedule date (optional)">
+                        </div>
                         <button id="save-quote-btn" class="save-quote-btn">Save Quote</button>
                         <button id="new-quote-btn" class="new-quote-btn">New Quote</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Customers Section -->
+        <div id="customers-section" class="customers-container hidden">
+            <div class="header">
+                <h1>Customer Management</h1>
+                <div class="header-actions">
+                    <button id="nav-calculator-btn-2" class="nav-btn">🏠 Calculator</button>
+                    <button id="nav-quotes-btn-2" class="nav-btn">📄 Quotes</button>
+                    <button id="nav-calendar-btn-2" class="nav-btn">📅 Calendar</button>
+                    <button id="nav-history-btn-2" class="nav-btn">📋 History</button>
+                    <button id="logout-btn-customers" class="logout-btn">Logout</button>
+                </div>
+            </div>
+
+            <div class="customers-content">
+                <div class="customers-controls">
+                    <button id="add-customer-btn" class="add-customer-btn">+ Add New Customer</button>
+                    <input type="text" id="customer-search" placeholder="Search customers..." class="search-input">
+                </div>
+                <div id="customers-list" class="customers-list">
+                    <!-- Customers will be loaded here -->
+                </div>
+                <div id="no-customers-message" class="no-customers-message hidden">
+                    <p>No customers yet. Add your first customer to get started.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar Section -->
+        <div id="calendar-section" class="calendar-container hidden">
+            <div class="header">
+                <h1>Project Calendar</h1>
+                <div class="header-actions">
+                    <button id="nav-calculator-btn-3" class="nav-btn">🏠 Calculator</button>
+                    <button id="nav-customers-btn-3" class="nav-btn">👥 Customers</button>
+                    <button id="nav-quotes-btn-3" class="nav-btn">📄 Quotes</button>
+                    <button id="nav-history-btn-3" class="nav-btn">📋 History</button>
+                    <button id="logout-btn-calendar" class="logout-btn">Logout</button>
+                </div>
+            </div>
+
+            <div class="calendar-content">
+                <div class="calendar-filters">
+                    <input type="month" id="calendar-month-select" class="calendar-month-select">
+                    <select id="calendar-status-filter" class="filter-select">
+                        <option value="">All Statuses</option>
+                        <option value="accepted">Accepted Only</option>
+                    </select>
+                </div>
+                <div id="calendar-view" class="calendar-view">
+                    <!-- Calendar will be rendered here -->
+                </div>
+                <div id="scheduled-quotes-list" class="scheduled-quotes-list">
+                    <!-- Scheduled quotes will be listed here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- History Section -->
+        <div id="history-section" class="history-container hidden">
+            <div class="header">
+                <h1>📋 Completed Projects History</h1>
+                <div class="header-actions">
+                    <button id="nav-calculator-btn-4" class="nav-btn">🏠 Calculator</button>
+                    <button id="nav-customers-btn-4" class="nav-btn">👥 Customers</button>
+                    <button id="nav-quotes-btn-4" class="nav-btn">📄 Quotes</button>
+                    <button id="nav-calendar-btn-4" class="nav-btn">📅 Calendar</button>
+                    <button id="logout-btn-history" class="logout-btn">Logout</button>
+                </div>
+            </div>
+
+            <div class="history-content">
+                <div class="history-controls">
+                    <input type="text" id="history-search" placeholder="Search completed projects..." class="search-input">
+                    <select id="history-date-filter" class="filter-select">
+                        <option value="">All Time</option>
+                        <option value="week">Last 7 Days</option>
+                        <option value="month">Last 30 Days</option>
+                        <option value="3months">Last 3 Months</option>
+                        <option value="year">This Year</option>
+                    </select>
+                    <button id="clear-history-filters-btn" class="clear-filters-btn">Clear Filters</button>
+                </div>
+                <div class="history-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-completed">0</div>
+                        <div class="stat-label">Total Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-revenue">R0</div>
+                        <div class="stat-label">Total Revenue</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="avg-project-value">R0</div>
+                        <div class="stat-label">Avg Project Value</div>
+                    </div>
+                </div>
+                <div id="history-list" class="history-list">
+                    <!-- Completed projects will be loaded here -->
+                </div>
+                <div id="no-history-message" class="no-history-message hidden">
+                    <p>No completed projects yet.</p>
                 </div>
             </div>
         </div>
@@ -132,7 +280,10 @@
             <div class="header">
                 <h1>My Saved Quotes</h1>
                 <div class="header-actions">
-                    <button id="back-to-calculator-btn" class="back-btn">Back to Calculator</button>
+                    <button id="nav-calculator-btn-5" class="nav-btn">🏠 Calculator</button>
+                    <button id="nav-customers-btn-5" class="nav-btn">👥 Customers</button>
+                    <button id="nav-calendar-btn-5" class="nav-btn">📅 Calendar</button>
+                    <button id="nav-history-btn-5" class="nav-btn">📋 History</button>
                     <button id="logout-btn-saved" class="logout-btn">Logout</button>
                 </div>
             </div>
@@ -150,6 +301,12 @@
                             <option value="Maizey Plastics">Maizey Plastics</option>
                             <option value="Stixo (Gloss White/Light Grey)">Stixo (Gloss White/Light Grey)</option>
                         </select>
+                        <select id="status-filter" class="filter-select">
+                            <option value="">All Statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="accepted">Accepted</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
                         <select id="date-filter" class="filter-select">
                             <option value="">All Time</option>
                             <option value="today">Today</option>
@@ -160,6 +317,7 @@
                         <button id="clear-filters-btn" class="clear-filters-btn">Clear Filters</button>
                     </div>
                     <div class="export-section">
+                        <button id="view-calendar-btn" class="calendar-btn">📅 View Calendar</button>
                         <button id="export-all-btn" class="export-btn">Export All to PDF</button>
                         <button id="export-filtered-btn" class="export-btn">Export Filtered to PDF</button>
                     </div>
@@ -172,6 +330,28 @@
                     <button id="create-first-quote-btn" class="create-quote-btn">Create Your First Quote</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Customer Modal -->
+    <div id="customer-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="customer-modal-title">Add Customer</h2>
+                <button class="close-modal-btn" id="close-customer-modal">&times;</button>
+            </div>
+            <form id="customer-form" class="modal-form">
+                <input type="hidden" id="customer-id">
+                <input type="text" id="customer-name" placeholder="Customer Name *" required>
+                <input type="tel" id="customer-phone" placeholder="Phone Number">
+                <input type="email" id="customer-email" placeholder="Email Address">
+                <textarea id="customer-address" placeholder="Physical Address" rows="3"></textarea>
+                <textarea id="customer-notes" placeholder="Notes (optional)" rows="3"></textarea>
+                <div class="modal-actions">
+                    <button type="submit" class="modal-save-btn">Save Customer</button>
+                    <button type="button" class="modal-cancel-btn" id="cancel-customer-modal">Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 
