@@ -889,8 +889,8 @@ class VinylQuoteApp {
         if (files.length === 0) return;
 
         for (const file of files) {
-            if (file.size > 5 * 1024 * 1024) {
-                this.showError(`${file.name} is too large. Max size is 5MB.`);
+            if (file.size > 10 * 1024 * 1024) {
+                this.showError(`${file.name} is too large. Max size is 10MB.`);
                 continue;
             }
 
