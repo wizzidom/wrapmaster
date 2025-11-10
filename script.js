@@ -938,15 +938,20 @@ class VinylQuoteApp {
         const uploadedUrls = [];
 
         for (const photo of this.uploadedPhotos) {
-            const fileName = `${quoteId}/${Date.now()}_${photo.name}`;
+            // Use user ID in path for RLS policies
+            const fileName = `${this.currentUser.id}/${quoteId}/${Date.now()}_${photo.name}`;
             
             try {
                 const { data, error } = await supabase.storage
                     .from('quote-photos')
-                    .upload(fileName, photo.file);
+                    .upload(fileName, photo.file, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
 
                 if (error) {
                     console.error('Photo upload error:', error);
+                    this.showError(`Failed to upload ${photo.name}: ${error.message}`);
                     continue;
                 }
 
@@ -961,6 +966,7 @@ class VinylQuoteApp {
                 });
             } catch (error) {
                 console.error('Photo upload failed:', error);
+                this.showError(`Failed to upload ${photo.name}`);
             }
         }
 
@@ -1475,6 +1481,7 @@ class VinylQuoteApp {
                 </div>
                 
                 <div class="quote-actions-saved">
+                    <button class="view-details-btn" onclick="app.viewQuoteDetails('${quote.id}')">👁️ View Details</button>
                     <select class="status-change-select" onchange="app.changeQuoteStatus('${quote.id}', this.value)">
                         <option value="">Change Status...</option>
                         <option value="pending" ${quote.status === 'pending' ? 'disabled' : ''}>Pending</option>
@@ -1499,6 +1506,189 @@ class VinylQuoteApp {
             'completed': 'Completed'
         };
         return labels[status] || 'Pending';
+    }
+
+    async viewQuoteDetails(quoteId) {
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) return;
+
+        // Load photos for this quote
+        const { data: photos, error: photosError } = await supabase
+            .from('quote_photos')
+            .select('*')
+            .eq('quote_id', quoteId)
+            .order('uploaded_at', { ascending: true });
+
+        // Load custom line items
+        const { data: customItems, error: itemsError } = await supabase
+            .from('custom_line_items')
+            .select('*')
+            .eq('quote_id', quoteId);
+
+        // Load customer info if linked
+        let customer = null;
+        if (quote.customer_id) {
+            const { data: customerData } = await supabase
+                .from('customers')
+                .select('*')
+                .eq('id', quote.customer_id)
+                .single();
+            customer = customerData;
+        }
+
+        this.showQuoteDetailsModal(quote, photos || [], customItems || [], customer);
+    }
+
+    showQuoteDetailsModal(quote, photos, customItems, customer) {
+        const photosHTML = photos.length > 0 ? `
+            <div class="modal-section">
+                <h3>📷 Photos (${photos.length})</h3>
+                <div class="modal-photos-grid">
+                    ${photos.map(photo => `
+                        <div class="modal-photo-item">
+                            <img src="${photo.photo_url}" alt="${photo.photo_name}" onclick="window.open('${photo.photo_url}', '_blank')">
+                            <span class="modal-photo-name">${photo.photo_name}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        ` : '';
+
+        const customItemsHTML = customItems.length > 0 ? `
+            <div class="modal-section">
+                <h3>➕ Additional Charges</h3>
+                <div class="modal-custom-items">
+                    ${customItems.map(item => `
+                        <div class="modal-custom-item">
+                            <span>${item.description}</span>
+                            <span class="item-amount">R${parseFloat(item.amount).toFixed(2)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        ` : '';
+
+        const customerHTML = customer ? `
+            <div class="modal-section">
+                <h3>👤 Customer Information</h3>
+                <div class="modal-customer-info">
+                    <p><strong>Name:</strong> ${customer.name}</p>
+                    ${customer.phone ? `<p><strong>Phone:</strong> ${customer.phone}</p>` : ''}
+                    ${customer.email ? `<p><strong>Email:</strong> ${customer.email}</p>` : ''}
+                    ${customer.address ? `<p><strong>Address:</strong> ${customer.address}</p>` : ''}
+                    ${customer.notes ? `<p><strong>Notes:</strong> ${customer.notes}</p>` : ''}
+                </div>
+            </div>
+        ` : '';
+
+        const modalHTML = `
+            <div class="modal-overlay" id="quote-details-modal">
+                <div class="modal-content quote-details-modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title">${quote.quote_name}</h2>
+                        <button class="close-modal-btn" onclick="app.closeQuoteDetailsModal()">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="modal-section">
+                            <div class="detail-status-row">
+                                <span class="status-badge status-${quote.status || 'pending'}">${this.getStatusLabel(quote.status || 'pending')}</span>
+                                ${quote.payment_status && quote.payment_status !== 'unpaid' ? `
+                                    <span class="payment-badge payment-${quote.payment_status}">${this.getPaymentStatusLabel(quote.payment_status)}</span>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        ${customerHTML}
+
+                        <div class="modal-section">
+                            <h3>📋 Project Details</h3>
+                            <div class="modal-details-grid">
+                                <div class="detail-item">
+                                    <span class="detail-label">Doors/Sides:</span>
+                                    <span class="detail-value">${quote.doors}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Square Metres:</span>
+                                    <span class="detail-value">${quote.square_metres}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Material:</span>
+                                    <span class="detail-value">${quote.material_name}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Material Rate:</span>
+                                    <span class="detail-value">R${quote.material_rate}/m²</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Project Duration:</span>
+                                    <span class="detail-value">${quote.project_days} day(s)</span>
+                                </div>
+                                ${quote.scheduled_date ? `
+                                <div class="detail-item">
+                                    <span class="detail-label">📅 Scheduled:</span>
+                                    <span class="detail-value">${new Date(quote.scheduled_date).toLocaleDateString()}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div class="modal-section">
+                            <h3>💰 Cost Breakdown</h3>
+                            <div class="modal-cost-breakdown">
+                                <div class="cost-item">
+                                    <span>Material Cost:</span>
+                                    <span>R${parseFloat(quote.material_cost).toFixed(2)}</span>
+                                </div>
+                                <div class="cost-item">
+                                    <span>Installation Fee:</span>
+                                    <span>R${parseFloat(quote.installation_fee).toFixed(2)}</span>
+                                </div>
+                                <div class="cost-item">
+                                    <span>Food Cost:</span>
+                                    <span>R${parseFloat(quote.food_cost).toFixed(2)}</span>
+                                </div>
+                                <div class="cost-item">
+                                    <span>Transport Cost:</span>
+                                    <span>R${parseFloat(quote.transport_cost).toFixed(2)}</span>
+                                </div>
+                                ${quote.custom_items_total > 0 ? `
+                                <div class="cost-item">
+                                    <span>Additional Charges:</span>
+                                    <span>R${parseFloat(quote.custom_items_total).toFixed(2)}</span>
+                                </div>
+                                ` : ''}
+                                <div class="cost-item cost-total">
+                                    <span><strong>Total:</strong></span>
+                                    <span><strong>R${parseFloat(quote.total_cost).toFixed(2)}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${customItemsHTML}
+                        ${photosHTML}
+
+                        <div class="modal-section">
+                            <p class="detail-date"><strong>Created:</strong> ${new Date(quote.created_at).toLocaleString()}</p>
+                            ${quote.updated_at ? `<p class="detail-date"><strong>Last Updated:</strong> ${new Date(quote.updated_at).toLocaleString()}</p>` : ''}
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button onclick="app.exportSingleQuote('${quote.id}')" class="modal-save-btn">Export PDF</button>
+                        ${quote.status !== 'completed' ? `<button onclick="app.generateInvoice('${quote.id}')" class="modal-save-btn">Generate Invoice</button>` : ''}
+                        <button onclick="app.closeQuoteDetailsModal()" class="modal-cancel-btn">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+    }
+
+    closeQuoteDetailsModal() {
+        const modal = document.getElementById('quote-details-modal');
+        if (modal) modal.remove();
     }
 
     async editQuote(quoteId) {
