@@ -24,6 +24,7 @@ class VinylQuoteApp {
         this.currentQuote = null;
         this.savedQuotes = [];
         this.filteredQuotes = [];
+        this.calculatorMode = 'doors'; // 'doors' or 'sqm'
         this.init();
     }
 
@@ -60,8 +61,13 @@ class VinylQuoteApp {
         document.getElementById('export-all-btn').addEventListener('click', () => this.exportToPDF('all'));
         document.getElementById('export-filtered-btn').addEventListener('click', () => this.exportToPDF('filtered'));
 
+        // Calculator mode toggle
+        document.getElementById('doors-mode-btn').addEventListener('click', () => this.switchToDoorsMode());
+        document.getElementById('sqm-mode-btn').addEventListener('click', () => this.switchToSqmMode());
+
         // Quote calculator
         document.getElementById('doors-input').addEventListener('input', () => this.handleDoorsInput());
+        document.getElementById('sqm-input').addEventListener('input', () => this.handleSqmInput());
         document.querySelectorAll('input[name="material"]').forEach(radio => {
             radio.addEventListener('change', () => this.handleMaterialSelection());
         });
@@ -216,11 +222,42 @@ class VinylQuoteApp {
         await this.loadSavedQuotes();
     }
 
+    switchToDoorsMode() {
+        this.calculatorMode = 'doors';
+        document.getElementById('doors-mode-btn').classList.add('active');
+        document.getElementById('sqm-mode-btn').classList.remove('active');
+        document.getElementById('doors-input-step').classList.remove('hidden');
+        document.getElementById('sqm-input-step').classList.add('hidden');
+        this.resetQuote();
+    }
+
+    switchToSqmMode() {
+        this.calculatorMode = 'sqm';
+        document.getElementById('sqm-mode-btn').classList.add('active');
+        document.getElementById('doors-mode-btn').classList.remove('active');
+        document.getElementById('sqm-input-step').classList.remove('hidden');
+        document.getElementById('doors-input-step').classList.add('hidden');
+        this.resetQuote();
+    }
+
     handleDoorsInput() {
         const doorsInput = document.getElementById('doors-input');
         const materialStep = document.getElementById('material-step');
 
         if (doorsInput.value && parseInt(doorsInput.value) > 0) {
+            materialStep.style.display = 'block';
+        } else {
+            materialStep.style.display = 'none';
+            document.getElementById('transport-step').style.display = 'none';
+            this.hideCalculateButton();
+        }
+    }
+
+    handleSqmInput() {
+        const sqmInput = document.getElementById('sqm-input');
+        const materialStep = document.getElementById('material-step');
+
+        if (sqmInput.value && parseFloat(sqmInput.value) > 0) {
             materialStep.style.display = 'block';
         } else {
             materialStep.style.display = 'none';
@@ -255,17 +292,34 @@ class VinylQuoteApp {
     }
 
     calculateQuote() {
-        const doors = parseInt(document.getElementById('doors-input').value);
         const selectedMaterial = document.querySelector('input[name="material"]:checked');
         const transportCost = parseFloat(document.getElementById('transport-input').value) || 0;
 
-        if (!doors || !selectedMaterial) {
-            alert('Please fill in all required fields');
+        if (!selectedMaterial) {
+            alert('Please select a material type');
             return;
         }
 
-        // Calculate square metres (2 doors = 1 square metre)
-        const squareMetres = doors / 2;
+        let doors, squareMetres;
+
+        if (this.calculatorMode === 'doors') {
+            doors = parseInt(document.getElementById('doors-input').value);
+            if (!doors || doors <= 0) {
+                alert('Please enter a valid number of doors');
+                return;
+            }
+            // Calculate square metres (2 doors = 1 square metre)
+            squareMetres = doors / 2;
+        } else {
+            // Square metres mode
+            squareMetres = parseFloat(document.getElementById('sqm-input').value);
+            if (!squareMetres || squareMetres <= 0) {
+                alert('Please enter a valid square metres value');
+                return;
+            }
+            // Calculate doors from square metres and round up
+            doors = Math.ceil(squareMetres * 2);
+        }
 
         // Calculate project duration (30 sides = 1 day)
         const projectDays = Math.ceil(doors / 30);
@@ -548,6 +602,7 @@ class VinylQuoteApp {
 
     resetQuote() {
         document.getElementById('doors-input').value = '';
+        document.getElementById('sqm-input').value = '';
         document.getElementById('transport-input').value = '';
         document.getElementById('material-step').style.display = 'none';
         document.getElementById('transport-step').style.display = 'none';
