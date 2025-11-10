@@ -1371,9 +1371,239 @@ class VinylQuoteApp {
         }
     }
 
-    exportInvoicePDF(quoteId) {
-        // This will use the existing PDF export but formatted as an invoice
-        this.exportSingleQuote(quoteId, true); // Pass true for invoice mode
+    async exportInvoicePDF(quoteId) {
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) {
+            this.showError('Quote not found');
+            return;
+        }
+
+        // Get customer info
+        let customer = null;
+        if (quote.customer_id) {
+            const { data: customerData } = await supabase
+                .from('customers')
+                .select('*')
+                .eq('id', quote.customer_id)
+                .single();
+            customer = customerData;
+        }
+
+        // If no customer linked, prompt for manual entry
+        if (!customer) {
+            const customerName = prompt('Enter customer name:');
+            if (!customerName || customerName.trim() === '') {
+                this.showError('Customer name is required for invoice');
+                return;
+            }
+
+            const customerPhone = prompt('Enter customer phone (optional):');
+            const customerEmail = prompt('Enter customer email (optional):');
+            const customerAddress = prompt('Enter customer address (optional):');
+
+            // Create temporary customer object for invoice
+            customer = {
+                name: customerName.trim(),
+                phone: customerPhone ? customerPhone.trim() : null,
+                email: customerEmail ? customerEmail.trim() : null,
+                address: customerAddress ? customerAddress.trim() : null
+            };
+        }
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            const pageWidth = doc.internal.pageSize.width;
+            const margin = 15;
+            const contentWidth = pageWidth - (margin * 2);
+            let yPosition = margin;
+
+            // Company header
+            doc.setFontSize(24);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(102, 126, 234);
+            doc.text('INVOICE', pageWidth / 2, yPosition, { align: 'center' });
+            yPosition += 15;
+
+            // Invoice number and date
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(0, 0, 0);
+            doc.text(`Invoice #: ${quote.invoice_number || 'N/A'}`, margin, yPosition);
+            doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - margin, yPosition, { align: 'right' });
+            yPosition += 10;
+
+            // Line separator
+            doc.setLineWidth(0.5);
+            doc.line(margin, yPosition, pageWidth - margin, yPosition);
+            yPosition += 10;
+
+            // From section
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.text('FROM:', margin, yPosition);
+            yPosition += 6;
+
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.text('Kitchen Wrap Masters', margin, yPosition);
+            yPosition += 5;
+            doc.text('Professional Kitchen Vinyl Wrapping', margin, yPosition);
+            yPosition += 5;
+            doc.text('Email: info@kitchenwrapmasters.co.za', margin, yPosition);
+            yPosition += 10;
+
+            // To section
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.text('BILL TO:', margin, yPosition);
+            yPosition += 6;
+
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.text(customer.name, margin, yPosition);
+            yPosition += 5;
+            if (customer.phone) {
+                doc.text(`Phone: ${customer.phone}`, margin, yPosition);
+                yPosition += 5;
+            }
+            if (customer.email) {
+                doc.text(`Email: ${customer.email}`, margin, yPosition);
+                yPosition += 5;
+            }
+            if (customer.address) {
+                doc.text(`Address: ${customer.address}`, margin, yPosition);
+                yPosition += 5;
+            }
+            yPosition += 10;
+
+            // Project details
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.text('PROJECT DETAILS:', margin, yPosition);
+            yPosition += 6;
+
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Project: ${quote.quote_name}`, margin, yPosition);
+            yPosition += 5;
+            doc.text(`Material: ${quote.material_name}`, margin, yPosition);
+            yPosition += 5;
+            doc.text(`Doors/Sides: ${quote.doors} (${quote.square_metres} m²)`, margin, yPosition);
+            yPosition += 5;
+            doc.text(`Duration: ${quote.project_days} day(s)`, margin, yPosition);
+            yPosition += 10;
+
+            // Line separator
+            doc.setLineWidth(0.5);
+            doc.line(margin, yPosition, pageWidth - margin, yPosition);
+            yPosition += 10;
+
+            // Service description box
+            doc.setFillColor(245, 245, 245);
+            doc.rect(margin, yPosition, contentWidth, 35, 'F');
+            
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(0, 0, 0);
+            doc.text('SERVICE PROVIDED:', margin + 5, yPosition + 8);
+            
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Kitchen Vinyl Wrapping - ${quote.material_name}`, margin + 5, yPosition + 15);
+            doc.text(`${quote.doors} Doors/Sides (${quote.square_metres} m²)`, margin + 5, yPosition + 21);
+            doc.text('Includes: Materials, Installation, Labour & All Associated Costs', margin + 5, yPosition + 27);
+            yPosition += 40;
+
+            // Total amount box
+            doc.setFillColor(102, 126, 234);
+            doc.rect(margin, yPosition, contentWidth, 12, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text('TOTAL AMOUNT:', margin + 5, yPosition + 8);
+            doc.text(`R${parseFloat(quote.total_cost).toFixed(2)}`, pageWidth - margin - 5, yPosition + 8, { align: 'right' });
+            yPosition += 17;
+
+            // Payment information - ensure all values are numbers
+            const totalCost = parseFloat(quote.total_cost) || 0;
+            const depositAmount = totalCost * 0.5;
+            const depositPaid = parseFloat(quote.deposit_paid) || 0;
+            const finalPaymentPaid = parseFloat(quote.final_payment_paid) || 0;
+            const totalPaid = depositPaid + finalPaymentPaid;
+            const amountDue = totalCost - totalPaid;
+
+            // Reset text color to black before payment section
+            doc.setTextColor(0, 0, 0);
+            
+            doc.setFillColor(245, 245, 245);
+            doc.rect(margin, yPosition, contentWidth, 25, 'F');
+
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(10);
+            doc.text('50% Deposit Required:', margin + 5, yPosition + 6);
+            doc.text(`R${depositAmount.toFixed(2)}`, pageWidth - margin - 5, yPosition + 6, { align: 'right' });
+
+            doc.text('Amount Paid:', margin + 5, yPosition + 12);
+            doc.text(`R${totalPaid.toFixed(2)}`, pageWidth - margin - 5, yPosition + 12, { align: 'right' });
+
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(220, 53, 69);
+            doc.text('AMOUNT DUE:', margin + 5, yPosition + 20);
+            doc.text(`R${amountDue.toFixed(2)}`, pageWidth - margin - 5, yPosition + 20, { align: 'right' });
+            yPosition += 30;
+
+            // Payment status
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(10);
+            const paymentStatus = quote.payment_status === 'paid' ? 'PAID IN FULL' : 
+                                 quote.payment_status === 'partial' ? 'PARTIALLY PAID' : 'UNPAID';
+            const statusColor = quote.payment_status === 'paid' ? [40, 167, 69] : 
+                               quote.payment_status === 'partial' ? [255, 193, 7] : [220, 53, 69];
+            
+            doc.setFillColor(...statusColor);
+            doc.rect(margin, yPosition, contentWidth, 8, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont(undefined, 'bold');
+            doc.text(`Payment Status: ${paymentStatus}`, pageWidth / 2, yPosition + 6, { align: 'center' });
+            yPosition += 15;
+
+            // Terms
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'bold');
+            doc.text('PAYMENT TERMS:', margin, yPosition);
+            yPosition += 5;
+
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(8);
+            doc.text('• 50% deposit required before work commences', margin, yPosition);
+            yPosition += 4;
+            doc.text('• Final payment due upon completion', margin, yPosition);
+            yPosition += 4;
+            doc.text('• Payment methods: Cash, Card, EFT', margin, yPosition);
+            yPosition += 10;
+
+            // Footer
+            // // doc.setFillColor(102, 126, 234);
+            // doc.rect(0, pageWidth - 20, pageWidth, 20, 'F');
+            // doc.setTextColor(255, 255, 255);
+            // doc.setFontSize(10);
+            // doc.text('Thank you for your business!', pageWidth / 2, pageWidth - 12, { align: 'center' });
+            // doc.setFontSize(8);
+            // doc.text('Kitchen Wrap Masters - Professional Kitchen Vinyl Wrapping Services', pageWidth / 2, pageWidth - 7, { align: 'center' });
+
+            // Save
+            const filename = `Invoice_${quote.invoice_number || quote.id}_${customer.name.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+            doc.save(filename);
+
+            this.showSuccess('Invoice PDF downloaded successfully!');
+        } catch (error) {
+            console.error('Invoice PDF error:', error);
+            this.showError('Failed to generate invoice PDF');
+        }
     }
 
     async loadSavedQuotes() {
