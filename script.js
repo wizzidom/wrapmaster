@@ -17,7 +17,7 @@ supabase.auth.getSession().then(({ data, error }) => {
     }
 });
 
-// User authentication and quote calculator functionalityJus
+// User authentication and quote calculator functionality
 class VinylQuoteApp {
     constructor() {
         this.currentUser = null;
@@ -214,7 +214,7 @@ class VinylQuoteApp {
                     }
                 }
             });
-
+         
             console.log('Signup response:', { data, error });
 
             if (error) {
@@ -603,6 +603,21 @@ class VinylQuoteApp {
         const status = document.getElementById('quote-status-select').value;
         const scheduledDate = document.getElementById('scheduled-date-input').value || null;
 
+        // Show loading indicator
+        console.log('Showing loading indicator...');
+        this.showLoading('Saving quote...');
+
+        // Disable save button to prevent double-clicks
+        const saveBtn = document.getElementById('save-quote-btn');
+        if (!saveBtn) {
+            console.error('Save button not found!');
+            return;
+        }
+        const originalText = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        console.log('Button disabled, starting save...');
+
         try {
             const { data: quoteData, error: quoteError } = await supabase
                 .from('saved_quotes')
@@ -627,7 +642,10 @@ class VinylQuoteApp {
                 .select();
 
             if (quoteError) {
+                this.hideLoading();
                 this.showError('Failed to save quote: ' + quoteError.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
                 return;
             }
 
@@ -670,7 +688,11 @@ class VinylQuoteApp {
                 }
             }
 
+            // Hide loading and show success
+            console.log('Save successful, hiding loading...');
+            this.hideLoading();
             this.showSuccess('Quote saved successfully!');
+            
             document.getElementById('quote-name-input').value = '';
             document.getElementById('quote-status-select').value = 'pending';
             document.getElementById('scheduled-date-input').value = '';
@@ -679,8 +701,24 @@ class VinylQuoteApp {
             this.uploadedPhotos.forEach(photo => URL.revokeObjectURL(photo.preview));
             this.uploadedPhotos = [];
             this.renderPhotoPreview();
+            
+            // Re-enable save button
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
+            
+            // Redirect to saved quotes after a brief delay
+            setTimeout(() => {
+                this.showSavedQuotes();
+            }, 1000);
         } catch (error) {
+            // Hide loading and show error
+            console.error('Save error caught:', error);
+            this.hideLoading();
             this.showError('Failed to save quote. Please try again.');
+            
+            // Re-enable save button
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
         }
     }
 
@@ -2045,7 +2083,37 @@ class VinylQuoteApp {
     }
 
     clearMessages() {
-        document.querySelectorAll('.error-message, .success-message').forEach(msg => msg.remove());
+        document.querySelectorAll('.error-message, .success-message, .loading-message').forEach(msg => msg.remove());
+    }
+
+    showLoading(message = 'Saving...') {
+        console.log('showLoading called with message:', message);
+        // Remove existing messages
+        this.clearMessages();
+
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'loading-message';
+        loadingDiv.innerHTML = `
+            <img src="loading.png" alt="Loading" class="loading-icon" />
+            <span>${message}</span>
+        `;
+
+        // Add to current visible section
+        const activeSection = document.querySelector('.quote-container:not(.hidden), .auth-container:not(.hidden), .saved-quotes-container:not(.hidden), .customers-container:not(.hidden)');
+        console.log('Active section found:', activeSection);
+        if (activeSection) {
+            activeSection.insertBefore(loadingDiv, activeSection.firstChild);
+            console.log('Loading message inserted');
+        } else {
+            console.error('No active section found for loading message');
+        }
+    }
+
+    hideLoading() {
+        console.log('hideLoading called');
+        const loadingMessages = document.querySelectorAll('.loading-message');
+        console.log('Found loading messages to remove:', loadingMessages.length);
+        loadingMessages.forEach(msg => msg.remove());
     }
 
     resetQuote() {
