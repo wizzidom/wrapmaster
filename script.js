@@ -2605,8 +2605,38 @@ class VinylQuoteApp {
         yPosition += 4;
         doc.text('in advance, full or partial payment must be made upon our arrival before work begins.', margin, yPosition);
         
+        // Banking details section
+        yPosition += 10;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('BANKING DETAILS', margin, yPosition);
+        yPosition += 6;
+        
+        doc.setLineWidth(0.3);
+        doc.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 6;
+        
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        const bankingDetails = [
+            ['Bank:', 'Bidvest Bank Alliance'],
+            ['Branch Code:', '683000'],
+            ['Account Holder:', 'Wisdom Gwativenga'],
+            ['Account Number:', '78605188211'],
+            ['Account Type:', 'Current']
+        ];
+        
+        bankingDetails.forEach(([label, value]) => {
+            doc.setFont(undefined, 'bold');
+            doc.text(label, margin + 3, yPosition);
+            doc.setFont(undefined, 'normal');
+            doc.text(value, margin + 40, yPosition);
+            yPosition += 5;
+        });
+        
         // Footer section
-        yPosition += 15;
+        yPosition += 8;
         doc.setFillColor(102, 126, 234);
         doc.rect(margin, yPosition, contentWidth, 20, 'F');
         
