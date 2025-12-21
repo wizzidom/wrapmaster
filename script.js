@@ -6,7 +6,12 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 console.log('Supabase URL:', SUPABASE_URL);
 console.log('Supabase Key:', SUPABASE_ANON_KEY.substring(0, 20) + '...');
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Initialize Supabase client safely
+if (!window.supabaseClient) {
+    window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+// Use var instead of const to avoid redeclaration errors
+var supabase = window.supabaseClient;
 
 // Test connection
 supabase.auth.getSession().then(({ data, error }) => {
