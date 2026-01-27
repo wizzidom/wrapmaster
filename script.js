@@ -2600,7 +2600,7 @@ class VinylQuoteApp {
         
         // Website link in blue
         doc.setTextColor(0, 0, 255);
-        doc.text('https://kitchenwrapmasters.co.za/termsandconditions', margin + 45, yPosition);
+        doc.text('https://kitchenwrapmasters.co.za/termsandconditions.html', margin + 45, yPosition);
         
         // Deposit information in red
         yPosition += 8;
