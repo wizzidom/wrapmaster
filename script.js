@@ -2627,7 +2627,7 @@ class VinylQuoteApp {
         const bankingDetails = [
             ['Bank:', 'Bidvest Bank Alliance'],
             ['Branch Code:', '683000'],
-            ['Account Holder:', 'Wisdom Gwativenga'],
+            ['Account Holder:', 'Kitchen Wrap Masters'],
             ['Account Number:', '78605188211'],
             ['Account Type:', 'Current']
         ];
