@@ -1551,8 +1551,7 @@ class VinylQuoteApp {
             
             doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
-            doc.text(`Kitchen Vinyl Wrapping - ${quote.material_name}`, margin + 5, yPosition + 15);
-            doc.text(`${quote.doors} Doors/Sides (${quote.square_metres} m²)`, margin + 5, yPosition + 21);
+        
             doc.text('Includes: Materials, Installation, Labour & All Associated Costs', margin + 5, yPosition + 27);
             yPosition += 40;
 
