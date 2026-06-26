@@ -2553,8 +2553,7 @@ class VinylQuoteApp {
 
         // Only show essential project details
         const projectDetails = [
-            ['Doors/Sides:', quote.doors],
-            ['Square Metres:', quote.square_metres],
+
             ['Duration:', `${quote.project_days} day(s) max`],
             ['Material:', quote.material_name],
             ['Color/Finish:', colorChosen]
