@@ -1874,14 +1874,7 @@ class VinylQuoteApp {
                         <div class="modal-section">
                             <h3>📋 Project Details</h3>
                             <div class="modal-details-grid">
-                                <div class="detail-item">
-                                    <span class="detail-label">Doors/Sides:</span>
-                                    <span class="detail-value">${quote.doors}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Square Metres:</span>
-                                    <span class="detail-value">${quote.square_metres}</span>
-                                </div>
+                              
                                 <div class="detail-item">
                                     <span class="detail-label">Material:</span>
                                     <span class="detail-value">${quote.material_name}</span>
