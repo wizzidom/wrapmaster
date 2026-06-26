@@ -1531,10 +1531,7 @@ class VinylQuoteApp {
             doc.setFont(undefined, 'normal');
             doc.text(`Project: ${quote.quote_name}`, margin, yPosition);
             yPosition += 5;
-            doc.text(`Material: ${quote.material_name}`, margin, yPosition);
-            yPosition += 5;
-            doc.text(`Doors/Sides: ${quote.doors} (${quote.square_metres} m²)`, margin, yPosition);
-            yPosition += 5;
+
             doc.text(`Duration: ${quote.project_days} day(s)`, margin, yPosition);
             yPosition += 10;
 
