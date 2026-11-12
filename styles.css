@@ -2781,3 +2781,10 @@ sktop-specific enhancements */
         order: -1;
     }
 }
+
+
+/* Toasts (one message system for every page) and dialogs */
+#toast-root { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); width: min(520px, 94%); z-index: 2000; }
+#toast-root > div { margin: 8px 0; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2); }
+.dialog-message { white-space: pre-line; color: #555; margin-bottom: 15px; font-size: 14px; }
+.dialog-label { font-size: 13px; font-weight: bold; color: #333; margin-bottom: -8px; }

@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kitchen Vinyl Wrapping Quotes</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 
@@ -88,26 +88,6 @@
                 <div class="step" id="material-step" style="display: none;">
                     <h3>Select Material Type:</h3>
                     <div class="material-options">
-                        <label class="material-option">
-                            <input type="radio" name="material" value="coverstyle" data-rate="500">
-                            <span>Coverstyle - R500 per metre</span>
-                        </label>
-                        <label class="material-option">
-                            <input type="radio" name="material" value="policut" data-rate="120">
-                            <span>Policut 6000 - R120 per metre</span>
-                        </label>
-                        <label class="material-option">
-                            <input type="radio" name="material" value="hexis" data-rate="120">
-                            <span>Hexis - R120 per metre</span>
-                        </label>
-                        <label class="material-option">
-                            <input type="radio" name="material" value="maizey" data-rate="120">
-                            <span>Maizey Plastics - R120 per metre</span>
-                        </label>
-                        <label class="material-option">
-                            <input type="radio" name="material" value="stixo" data-rate="80">
-                            <span>Stixo (Gloss White/Light Grey) - R80 per metre</span>
-                        </label>
                     </div>
                 </div>
 
@@ -263,7 +243,10 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-value" id="avg-project-value">R0</div>
-                        <div class="stat-label">Avg Project Value</div>
+                        <div class="stat-label">Avg Project Value</div></div>
+                    <div class="stat-card"><div class="stat-value" id="win-rate">-</div><div class="stat-label">Quote Win Rate</div></div>
+                    <div class="stat-card"><div class="stat-value" id="pipeline-value">R0</div><div class="stat-label">Open Pipeline</div></div>
+                    <div class="stat-card"><div class="stat-value" id="stat-outstanding">R0</div><div class="stat-label">Outstanding Payments</div>
                     </div>
                 </div>
                 <div id="history-list" class="history-list">
@@ -295,11 +278,6 @@
                             class="search-input">
                         <select id="material-filter" class="filter-select">
                             <option value="">All Materials</option>
-                            <option value="Coverstyle">Coverstyle</option>
-                            <option value="Policut 6000">Policut 6000</option>
-                            <option value="Hexis">Hexis</option>
-                            <option value="Maizey Plastics">Maizey Plastics</option>
-                            <option value="Stixo (Gloss White/Light Grey)">Stixo (Gloss White/Light Grey)</option>
                         </select>
                         <select id="status-filter" class="filter-select">
                             <option value="">All Statuses</option>
@@ -320,6 +298,7 @@
                         <button id="view-calendar-btn" class="calendar-btn">📅 View Calendar</button>
                         <button id="export-all-btn" class="export-btn">Export All to PDF</button>
                         <button id="export-filtered-btn" class="export-btn">Export Filtered to PDF</button>
+                        <button id="export-csv-btn" class="export-btn">Export CSV</button>
                     </div>
                 </div>
                 <div id="saved-quotes-list" class="saved-quotes-list">
@@ -355,6 +334,7 @@
         </div>
     </div>
 
+    <script src="logo-data.js"></script>
     <script src="script.js"></script>
 </body>
 

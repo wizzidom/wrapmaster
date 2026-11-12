@@ -3,8 +3,6 @@ const SUPABASE_URL = 'https://ambfzfwunqeumfbgaacp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtYmZ6Znd1bnFldW1mYmdhYWNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NTA0MjEsImV4cCI6MjA3ODAyNjQyMX0.6_1OCz9VhJxAEAvQFsg3JhQiMwBYA7XepCXHPXLHXTQ';
 
 // Debug logging
-console.log('Supabase URL:', SUPABASE_URL);
-console.log('Supabase Key:', SUPABASE_ANON_KEY.substring(0, 20) + '...');
 
 // Initialize Supabase client safely
 if (!window.supabaseClient) {
@@ -18,9 +16,40 @@ supabase.auth.getSession().then(({ data, error }) => {
     if (error) {
         console.error('Supabase connection error:', error);
     } else {
-        console.log('Supabase connected successfully');
     }
 });
+
+// Helpers: HTML-escape user text, format money as R6 000.00
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtR = n => 'R' + (Number(n) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+// Business details and document wording (edit here)
+const BUSINESS = {
+    name: 'Kitchen Wrap Masters', area: 'Joburg South', phone: '071 958 5783', email: 'wiseman@kitchenwrapmasters.co.za',
+    terms: 'https://kitchenwrapmasters.co.za/pages/termsandconditions.html',
+    bank: [['Bank', 'Bidvest Bank Alliance'], ['Account holder', 'Kitchen Wrap Masters'], ['Account number', '78605188211'], ['Account type', 'Current'], ['Branch code', '683000']],
+    scope: [
+        'Wrapping of cupboard door fronts', 'Wrapping over the edges of each door', 'Wrapping of all visible edging',
+        'Cleaning and preparation of all surfaces before wrapping', 'Cleaning of handles',
+        'Adjustment of damaged hinges where necessary', 'Adjustment of damaged drawer runners where necessary',
+        'Silicone application to relevant areas', 'Sanding of the doors where necessary',
+        'Reinstallation and adjustment of doors, drawers and hardware after wrapping',
+        'Final cleaning and finishing to ensure a neat, professional result'],
+    exclusions: 'We wrap the front of the doors and over the edges only. The inside of the doors and internal cabinet sections are not included. We do not wrap countertops.'
+};
+const ORANGE = [255, 106, 0], DARK = [26, 31, 31], GREY = [105, 110, 110], SOFT = [246, 246, 244];
+
+// Pricing config: edit rates here (single source of truth)
+const PRICING = {
+    doorsPerSqm: 2, sidesPerDay: 30, installPerSide: 95, foodPerDay: 300,
+    materials: [
+        { id: 'coverstyle', name: 'Coverstyle', rate: 500 },
+        { id: 'policut', name: 'Policut 6000', rate: 120 },
+        { id: 'hexis', name: 'Hexis', rate: 120 },
+        { id: 'maizey', name: 'Maizey Plastics', rate: 120 },
+        { id: 'stixo', name: 'Stixo (Gloss White/Light Grey)', rate: 80 }
+    ]
+};
 
 // User authentication and quote calculator functionality
 class VinylQuoteApp {
@@ -41,6 +70,7 @@ class VinylQuoteApp {
     }
 
     init() {
+        this.renderMaterials();
         this.bindEvents();
         this.checkAuthStatus();
     }
@@ -107,6 +137,7 @@ class VinylQuoteApp {
         // Export functionality
         document.getElementById('export-all-btn').addEventListener('click', () => this.exportToPDF('all'));
         document.getElementById('export-filtered-btn').addEventListener('click', () => this.exportToPDF('filtered'));
+        document.getElementById('export-csv-btn').addEventListener('click', () => this.exportCSV());
 
         // Calculator mode toggle
         document.getElementById('doors-mode-btn').addEventListener('click', () => this.switchToDoorsMode());
@@ -208,7 +239,6 @@ class VinylQuoteApp {
         }
 
         try {
-            console.log('Attempting signup with:', { email, name });
 
             const { data, error } = await supabase.auth.signUp({
                 email: email,
@@ -220,7 +250,6 @@ class VinylQuoteApp {
                 }
             });
          
-            console.log('Signup response:', { data, error });
 
             if (error) {
                 console.error('Supabase signup error:', error);
@@ -265,8 +294,9 @@ class VinylQuoteApp {
         // Listen for auth changes
         supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN') {
+                const isNew = !this.currentUser || this.currentUser.id !== session.user.id;
                 this.currentUser = session.user;
-                this.showQuoteSection();
+                if (isNew) this.showQuoteSection();
             } else if (event === 'SIGNED_OUT') {
                 this.currentUser = null;
                 this.showAuthSection();
@@ -334,6 +364,7 @@ class VinylQuoteApp {
         document.getElementById('calendar-section').classList.add('hidden');
         document.getElementById('history-section').classList.add('hidden');
         document.getElementById('saved-quotes-section').classList.remove('hidden');
+        await this.loadCustomers();
         await this.loadSavedQuotes();
     }
 
@@ -343,7 +374,9 @@ class VinylQuoteApp {
         document.getElementById('sqm-mode-btn').classList.remove('active');
         document.getElementById('doors-input-step').classList.remove('hidden');
         document.getElementById('sqm-input-step').classList.add('hidden');
-        this.resetQuote();
+        const s = parseFloat(document.getElementById('sqm-input').value);
+        if (s > 0 && !document.getElementById('doors-input').value) document.getElementById('doors-input').value = Math.ceil(s * PRICING.doorsPerSqm);
+        this.handleDoorsInput();
     }
 
     switchToSqmMode() {
@@ -352,10 +385,13 @@ class VinylQuoteApp {
         document.getElementById('doors-mode-btn').classList.remove('active');
         document.getElementById('sqm-input-step').classList.remove('hidden');
         document.getElementById('doors-input-step').classList.add('hidden');
-        this.resetQuote();
+        const d = parseInt(document.getElementById('doors-input').value);
+        if (d > 0 && !document.getElementById('sqm-input').value) document.getElementById('sqm-input').value = d / PRICING.doorsPerSqm;
+        this.handleSqmInput();
     }
 
     handleDoorsInput() {
+        this.recalcIfShown();
         const doorsInput = document.getElementById('doors-input');
         const materialStep = document.getElementById('material-step');
 
@@ -369,6 +405,7 @@ class VinylQuoteApp {
     }
 
     handleSqmInput() {
+        this.recalcIfShown();
         const sqmInput = document.getElementById('sqm-input');
         const materialStep = document.getElementById('material-step');
 
@@ -382,6 +419,7 @@ class VinylQuoteApp {
     }
 
     handleMaterialSelection() {
+        this.recalcIfShown();
         const selectedMaterial = document.querySelector('input[name="material"]:checked');
         const transportStep = document.getElementById('transport-step');
         const customItemsStep = document.getElementById('custom-items-step');
@@ -402,6 +440,7 @@ class VinylQuoteApp {
     }
 
     handleTransportInput() {
+        this.recalcIfShown();
         // Show custom items and photo upload steps when transport is visible
         const transportStep = document.getElementById('transport-step');
         const customItemsStep = document.getElementById('custom-items-step');
@@ -421,10 +460,10 @@ class VinylQuoteApp {
             if (customer) {
                 customerInfo.innerHTML = `
                     <div class="customer-details">
-                        <p><strong>${customer.name}</strong></p>
-                        ${customer.phone ? `<p>📞 ${customer.phone}</p>` : ''}
-                        ${customer.email ? `<p>📧 ${customer.email}</p>` : ''}
-                        ${customer.address ? `<p>📍 ${customer.address}</p>` : ''}
+                        <p><strong>${esc(customer.name)}</strong></p>
+                        ${customer.phone ? `<p>📞 ${esc(customer.phone)}</p>` : ''}
+                        ${customer.email ? `<p>📧 ${esc(customer.email)}</p>` : ''}
+                        ${customer.address ? `<p>📍 ${esc(customer.address)}</p>` : ''}
                     </div>
                 `;
                 customerInfo.classList.remove('hidden');
@@ -434,12 +473,14 @@ class VinylQuoteApp {
         }
     }
 
-    addCustomLineItem() {
-        const description = prompt('Enter item description:');
-        if (!description || description.trim() === '') return;
-
-        const amount = parseFloat(prompt('Enter amount (R):'));
-        if (isNaN(amount) || amount <= 0) {
+    async addCustomLineItem() {
+        const r = await this.ask({ title: 'Add additional charge', fields: [
+            { name: 'description', label: 'Description', required: true },
+            { name: 'amount', label: 'Amount (R) - use a minus for a discount', type: 'number', step: '0.01', required: true }], okText: 'Add' });
+        if (!r) return;
+        const description = r.description;
+        const amount = parseFloat(r.amount);
+        if (isNaN(amount) || amount === 0) {
             this.showError('Please enter a valid amount');
             return;
         }
@@ -463,8 +504,8 @@ class VinylQuoteApp {
 
         container.innerHTML = this.customLineItems.map((item, index) => `
             <div class="custom-line-item">
-                <span class="item-description">${item.description}</span>
-                <span class="item-amount">R${item.amount.toFixed(2)}</span>
+                <span class="item-description">${esc(item.description)}</span>
+                <span class="item-amount">${fmtR(item.amount)}</span>
                 <button class="remove-item-btn" onclick="app.removeCustomLineItem(${index})">×</button>
             </div>
         `).join('');
@@ -476,23 +517,7 @@ class VinylQuoteApp {
         this.updateCustomItemsTotal();
     }
 
-    updateCustomItemsTotal() {
-        const total = this.customLineItems.reduce((sum, item) => sum + item.amount, 0);
-        
-        if (total > 0 && this.currentQuote) {
-            this.currentQuote.customItemsTotal = total;
-            this.currentQuote.totalCost = 
-                this.currentQuote.materialCost + 
-                this.currentQuote.installationFee + 
-                this.currentQuote.foodCost + 
-                this.currentQuote.transportCost + 
-                total;
-            
-            document.getElementById('custom-items-result').style.display = 'block';
-            document.getElementById('result-custom-items').textContent = total.toFixed(2);
-            document.getElementById('result-total').textContent = this.currentQuote.totalCost.toFixed(2);
-        }
-    }
+    updateCustomItemsTotal() { this.recalcIfShown(); }
 
     hideCalculateButton() {
         document.getElementById('calculate-btn').style.display = 'none';
@@ -500,12 +525,13 @@ class VinylQuoteApp {
         document.getElementById('transport-step').style.display = 'none';
     }
 
-    calculateQuote() {
+    calculateQuote(silent = false) {
+        const bad = m => { if (silent) { this.currentQuote = null; document.getElementById('quote-result').style.display = 'none'; } else { this.showError(m); } };
         const selectedMaterial = document.querySelector('input[name="material"]:checked');
-        const transportCost = parseFloat(document.getElementById('transport-input').value) || 0;
+        const transportCost = Math.max(0, parseFloat(document.getElementById('transport-input').value) || 0);
 
         if (!selectedMaterial) {
-            alert('Please select a material type');
+            bad('Please select a material type');
             return;
         }
 
@@ -514,33 +540,33 @@ class VinylQuoteApp {
         if (this.calculatorMode === 'doors') {
             doors = parseInt(document.getElementById('doors-input').value);
             if (!doors || doors <= 0) {
-                alert('Please enter a valid number of doors');
+                bad('Please enter a valid number of doors');
                 return;
             }
             // Calculate square metres (2 doors = 1 square metre)
-            squareMetres = doors / 2;
+            squareMetres = doors / PRICING.doorsPerSqm;
         } else {
             // Square metres mode
             squareMetres = parseFloat(document.getElementById('sqm-input').value);
             if (!squareMetres || squareMetres <= 0) {
-                alert('Please enter a valid square metres value');
+                bad('Please enter a valid square metres value');
                 return;
             }
             // Calculate doors from square metres and round up
-            doors = Math.ceil(squareMetres * 2);
+            doors = Math.ceil(squareMetres * PRICING.doorsPerSqm);
         }
 
         // Calculate project duration (30 sides = 1 day)
-        const projectDays = Math.ceil(doors / 30);
+        const projectDays = Math.ceil(doors / PRICING.sidesPerDay);
 
         // Get material rate
-        const materialRate = parseInt(selectedMaterial.dataset.rate);
+        const materialRate = parseFloat(selectedMaterial.dataset.rate);
         const materialName = this.getMaterialName(selectedMaterial.value);
 
         // Calculate costs
         const materialCost = squareMetres * materialRate;
-        const installationFee = doors * 95; // R95 per side
-        const foodCost = projectDays * 300; // R300 per day for food
+        const installationFee = doors * PRICING.installPerSide;
+        const foodCost = projectDays * PRICING.foodPerDay;
         const customItemsTotal = this.customLineItems.reduce((sum, item) => sum + item.amount, 0);
         const totalCost = materialCost + installationFee + foodCost + transportCost + customItemsTotal;
 
@@ -561,14 +587,8 @@ class VinylQuoteApp {
     }
 
     getMaterialName(value) {
-        const materials = {
-            'coverstyle': 'Coverstyle',
-            'policut': 'Policut 6000',
-            'hexis': 'Hexis',
-            'maizey': 'Maizey Plastics',
-            'stixo': 'Stixo (Gloss White/Light Grey)'
-        };
-        return materials[value] || value;
+        const m = PRICING.materials.find(x => x.id === value);
+        return m ? m.name : value;
     }
 
     displayQuoteResult(quote) {
@@ -581,7 +601,7 @@ class VinylQuoteApp {
         document.getElementById('result-food-cost').textContent = quote.foodCost.toFixed(2);
         document.getElementById('result-transport-cost').textContent = quote.transportCost.toFixed(2);
         
-        if (quote.customItemsTotal > 0) {
+        if (quote.customItemsTotal !== 0) {
             document.getElementById('custom-items-result').style.display = 'block';
             document.getElementById('result-custom-items').textContent = quote.customItemsTotal.toFixed(2);
         } else {
@@ -603,13 +623,12 @@ class VinylQuoteApp {
         }
 
         const quoteName = document.getElementById('quote-name-input').value.trim() ||
-            `Quote ${new Date().toLocaleDateString()}`;
+            `Quote ${new Date().toLocaleDateString('en-ZA')}`;
         const customerId = document.getElementById('customer-select').value || null;
         const status = document.getElementById('quote-status-select').value;
         const scheduledDate = document.getElementById('scheduled-date-input').value || null;
 
         // Show loading indicator
-        console.log('Showing loading indicator...');
         this.showLoading('Saving quote...');
 
         // Disable save button to prevent double-clicks
@@ -621,7 +640,6 @@ class VinylQuoteApp {
         const originalText = saveBtn.textContent;
         saveBtn.disabled = true;
         saveBtn.textContent = 'Saving...';
-        console.log('Button disabled, starting save...');
 
         try {
             const { data: quoteData, error: quoteError } = await supabase
@@ -655,6 +673,7 @@ class VinylQuoteApp {
             }
 
             const quoteId = quoteData[0].id;
+            const warnings = [];
 
             // Save custom line items if any
             if (this.customLineItems.length > 0) {
@@ -669,13 +688,14 @@ class VinylQuoteApp {
                     .insert(lineItemsToInsert);
 
                 if (itemsError) {
-                    console.error('Failed to save custom line items:', itemsError);
+                    warnings.push('additional charges');
                 }
             }
 
             // Upload photos if any
             if (this.uploadedPhotos.length > 0) {
                 const photoRecords = await this.uploadPhotosToStorage(quoteId);
+                if (photoRecords.length < this.uploadedPhotos.length) warnings.push('some photos');
                 
                 if (photoRecords.length > 0) {
                     const photosToInsert = photoRecords.map(photo => ({
@@ -688,24 +708,16 @@ class VinylQuoteApp {
                         .insert(photosToInsert);
 
                     if (photosError) {
-                        console.error('Failed to save photo records:', photosError);
+                        warnings.push('photos');
                     }
                 }
             }
 
             // Hide loading and show success
-            console.log('Save successful, hiding loading...');
             this.hideLoading();
-            this.showSuccess('Quote saved successfully!');
+            if (warnings.length) this.showError(`Quote saved, but not saved: ${warnings.join(', ')}. Open the quote to check.`); else this.showSuccess('Quote saved successfully!');
             
-            document.getElementById('quote-name-input').value = '';
-            document.getElementById('quote-status-select').value = 'pending';
-            document.getElementById('scheduled-date-input').value = '';
-            
-            // Clear photos
-            this.uploadedPhotos.forEach(photo => URL.revokeObjectURL(photo.preview));
-            this.uploadedPhotos = [];
-            this.renderPhotoPreview();
+            if (!warnings.length) this.resetQuote();
             
             // Re-enable save button
             saveBtn.disabled = false;
@@ -753,6 +765,7 @@ class VinylQuoteApp {
 
     populateCustomerDropdown() {
         const select = document.getElementById('customer-select');
+        const prev = select.value;
         select.innerHTML = '<option value="">-- New Customer --</option>';
         
         this.customers.forEach(customer => {
@@ -761,6 +774,8 @@ class VinylQuoteApp {
             option.textContent = customer.name;
             select.appendChild(option);
         });
+        select.value = prev;
+        this.handleCustomerSelection();
     }
 
     renderCustomers() {
@@ -787,17 +802,17 @@ class VinylQuoteApp {
         container.innerHTML = this.filteredCustomers.map(customer => `
             <div class="customer-item">
                 <div class="customer-header">
-                    <div class="customer-name">${customer.name}</div>
+                    <div class="customer-name">${esc(customer.name)}</div>
                     <div class="customer-actions">
                         <button class="edit-customer-btn" onclick="app.editCustomer('${customer.id}')">Edit</button>
                         <button class="delete-customer-btn" onclick="app.deleteCustomer('${customer.id}')">Delete</button>
                     </div>
                 </div>
                 <div class="customer-details">
-                    ${customer.phone ? `<p>📞 ${customer.phone}</p>` : ''}
-                    ${customer.email ? `<p>📧 ${customer.email}</p>` : ''}
-                    ${customer.address ? `<p>📍 ${customer.address}</p>` : ''}
-                    ${customer.notes ? `<p>📝 ${customer.notes}</p>` : ''}
+                    ${customer.phone ? `<p>📞 ${esc(customer.phone)}</p>` : ''}
+                    ${customer.email ? `<p>📧 ${esc(customer.email)}</p>` : ''}
+                    ${customer.address ? `<p>📍 ${esc(customer.address)}</p>` : ''}
+                    ${customer.notes ? `<p>📝 ${esc(customer.notes)}</p>` : ''}
                 </div>
             </div>
         `).join('');
@@ -905,7 +920,7 @@ class VinylQuoteApp {
     }
 
     async deleteCustomer(customerId) {
-        if (!confirm('Are you sure you want to delete this customer? This will not delete their quotes.')) return;
+        if (!await this.confirmBox('Are you sure you want to delete this customer? This will not delete their quotes.')) return;
 
         try {
             const { error} = await supabase
@@ -928,7 +943,7 @@ class VinylQuoteApp {
 
     // Photo Upload Methods
     async handlePhotoUpload(event) {
-        const files = Array.from(event.target.files);
+        const files = await Promise.all(Array.from(event.target.files).map(f => this.compressImage(f)));
         if (files.length === 0) return;
 
         for (const file of files) {
@@ -959,9 +974,9 @@ class VinylQuoteApp {
 
         container.innerHTML = this.uploadedPhotos.map((photo, index) => `
             <div class="photo-preview-item">
-                <img src="${photo.preview}" alt="${photo.name}">
+                <img src="${photo.preview}" alt="${esc(photo.name)}">
                 <div class="photo-info">
-                    <span class="photo-name">${photo.name}</span>
+                    <span class="photo-name">${esc(photo.name)}</span>
                     <span class="photo-size">${(photo.size / 1024).toFixed(1)} KB</span>
                 </div>
                 <button class="remove-photo-btn" onclick="app.removePhoto(${index})">×</button>
@@ -1091,12 +1106,12 @@ class VinylQuoteApp {
                             ${dayQuotes.map(quote => `
                                 <div class="calendar-quote-item">
                                     <div class="calendar-quote-info">
-                                        <span class="calendar-quote-name">${quote.quote_name}</span>
+                                        <span class="calendar-quote-name">${esc(quote.quote_name)}</span>
                                         <span class="status-badge status-${quote.status}">${this.getStatusLabel(quote.status)}</span>
                                     </div>
                                     <div class="calendar-quote-details">
                                         <span>${quote.doors} doors</span>
-                                        <span>R${parseFloat(quote.total_cost).toFixed(2)}</span>
+                                        <span>${fmtR(parseFloat(quote.total_cost))}</span>
                                     </div>
                                     <button class="view-quote-btn" onclick="app.viewQuoteFromCalendar('${quote.id}')">View Details</button>
                                 </div>
@@ -1108,17 +1123,7 @@ class VinylQuoteApp {
         `;
     }
 
-    viewQuoteFromCalendar(quoteId) {
-        // Navigate to saved quotes and highlight the quote
-        this.showSavedQuotes();
-        setTimeout(() => {
-            const quoteElement = document.querySelector(`[data-quote-id="${quoteId}"]`);
-            if (quoteElement) {
-                quoteElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                quoteElement.style.animation = 'highlight 2s';
-            }
-        }, 300);
-    }
+    viewQuoteFromCalendar(quoteId) { this.viewQuoteDetails(quoteId); }
 
     // History Methods
     renderHistory() {
@@ -1181,8 +1186,14 @@ class VinylQuoteApp {
         const avgProjectValue = totalCompleted > 0 ? totalRevenue / totalCompleted : 0;
         
         document.getElementById('total-completed').textContent = totalCompleted;
-        document.getElementById('total-revenue').textContent = `R${totalRevenue.toFixed(2)}`;
-        document.getElementById('avg-project-value').textContent = `R${avgProjectValue.toFixed(2)}`;
+        document.getElementById('total-revenue').textContent = `${fmtR(totalRevenue)}`;
+        document.getElementById('avg-project-value').textContent = `${fmtR(avgProjectValue)}`;
+        const all = this.savedQuotes, num = v => parseFloat(v) || 0;
+        const decided = all.filter(q => ['accepted', 'completed', 'rejected'].includes(q.status));
+        const won = decided.filter(q => q.status !== 'rejected').length;
+        document.getElementById('win-rate').textContent = decided.length ? Math.round(won / decided.length * 100) + '%' : '-';
+        document.getElementById('pipeline-value').textContent = fmtR(all.filter(q => q.status === 'pending' || q.status === 'accepted').reduce((s, q) => s + num(q.total_cost), 0));
+        document.getElementById('stat-outstanding').textContent = fmtR(all.filter(q => q.status === 'accepted' || q.status === 'completed').reduce((s, q) => s + Math.max(0, num(q.total_cost) - num(q.deposit_paid) - num(q.final_payment_paid)), 0));
         
         if (this.filteredHistory.length === 0) {
             container.innerHTML = '';
@@ -1195,14 +1206,14 @@ class VinylQuoteApp {
         container.innerHTML = this.filteredHistory.map(quote => `
             <div class="history-item">
                 <div class="history-header">
-                    <div class="history-title">${quote.quote_name}</div>
-                    <div class="history-date">Completed: ${new Date(quote.updated_at || quote.created_at).toLocaleDateString()}</div>
+                    <div class="history-title">${esc(quote.quote_name)}</div>
+                    <div class="history-date">Completed: ${new Date(quote.updated_at || quote.created_at).toLocaleDateString('en-ZA')}</div>
                 </div>
                 
                 <div class="history-details">
                     <div class="history-detail">
                         <span>📅 Scheduled:</span>
-                        <span>${quote.scheduled_date ? new Date(quote.scheduled_date).toLocaleDateString() : 'Not scheduled'}</span>
+                        <span>${quote.scheduled_date ? new Date(quote.scheduled_date).toLocaleDateString('en-ZA') : 'Not scheduled'}</span>
                     </div>
                     <div class="history-detail">
                         <span>🚪 Doors:</span>
@@ -1214,11 +1225,11 @@ class VinylQuoteApp {
                     </div>
                     <div class="history-detail">
                         <span>🎨 Material:</span>
-                        <span>${quote.material_name}</span>
+                        <span>${esc(quote.material_name)}</span>
                     </div>
                     <div class="history-detail">
                         <span>💰 Total:</span>
-                        <span class="history-total">R${parseFloat(quote.total_cost).toFixed(2)}</span>
+                        <span class="history-total">${fmtR(parseFloat(quote.total_cost))}</span>
                     </div>
                     <div class="history-detail">
                         <span>💳 Payment:</span>
@@ -1245,17 +1256,7 @@ class VinylQuoteApp {
         return labels[status] || 'Unpaid';
     }
 
-    viewHistoryDetails(quoteId) {
-        // Navigate to saved quotes and highlight the quote
-        this.showSavedQuotes();
-        setTimeout(() => {
-            const quoteElement = document.querySelector(`[data-quote-id="${quoteId}"]`);
-            if (quoteElement) {
-                quoteElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                quoteElement.style.animation = 'highlight 2s';
-            }
-        }, 300);
-    }
+    viewHistoryDetails(quoteId) { this.viewQuoteDetails(quoteId); }
 
     clearHistoryFilters() {
         document.getElementById('history-search').value = '';
@@ -1267,7 +1268,7 @@ class VinylQuoteApp {
         const quote = this.savedQuotes.find(q => q.id === quoteId);
         if (!quote) return;
 
-        if (!confirm(`Are you sure you want to permanently delete "${quote.quote_name}"?\n\nThis will delete:\n- The quote\n- All photos\n- All custom line items\n- Invoice records\n\nThis action cannot be undone.`)) {
+        if (!await this.confirmBox(`Are you sure you want to permanently delete "${quote.quote_name}"?\n\nThis will delete:\n- The quote\n- All photos\n- All custom line items\n- Invoice records\n\nThis action cannot be undone.`)) {
             return;
         }
 
@@ -1297,7 +1298,7 @@ class VinylQuoteApp {
         if (!quote) return;
 
         if (quote.status !== 'accepted' && quote.status !== 'completed') {
-            if (!confirm('This quote is not accepted yet. Generate invoice anyway?')) {
+            if (!await this.confirmBox('This quote is not accepted yet. Generate invoice anyway?')) {
                 return;
             }
         }
@@ -1324,21 +1325,21 @@ class VinylQuoteApp {
 
     showInvoiceModal(quote, invoiceNumber) {
         const depositAmount = (quote.total_cost * 0.5).toFixed(2);
-        const remainingAmount = (quote.total_cost - (quote.deposit_paid || 0)).toFixed(2);
+        const remainingAmount = (parseFloat(quote.total_cost) - (parseFloat(quote.deposit_paid) || 0) - (parseFloat(quote.final_payment_paid) || 0)).toFixed(2);
 
         const modalHTML = `
             <div class="modal-overlay" id="invoice-modal">
                 <div class="modal-content invoice-modal-content">
                     <div class="modal-header">
-                        <h2 class="modal-title">Invoice: ${invoiceNumber}</h2>
+                        <h2 class="modal-title">Invoice: ${esc(invoiceNumber)}</h2>
                         <button class="close-modal-btn" onclick="app.closeInvoiceModal()">&times;</button>
                     </div>
                     <div class="invoice-details">
-                        <h3>${quote.quote_name}</h3>
-                        <p><strong>Total Amount:</strong> R${parseFloat(quote.total_cost).toFixed(2)}</p>
+                        <h3>${esc(quote.quote_name)}</h3>
+                        <p><strong>Total Amount:</strong> ${fmtR(parseFloat(quote.total_cost))}</p>
                         <p><strong>50% Deposit:</strong> R${depositAmount}</p>
-                        <p><strong>Deposit Paid:</strong> R${(quote.deposit_paid || 0).toFixed(2)}</p>
-                        <p><strong>Final Payment Paid:</strong> R${(quote.final_payment_paid || 0).toFixed(2)}</p>
+                        <p><strong>Deposit Paid:</strong> ${fmtR((quote.deposit_paid || 0))}</p>
+                        <p><strong>Final Payment Paid:</strong> ${fmtR((quote.final_payment_paid || 0))}</p>
                         <p class="remaining-amount"><strong>Amount Due:</strong> R${remainingAmount}</p>
                         
                         <div class="payment-actions">
@@ -1382,14 +1383,14 @@ class VinylQuoteApp {
         const updateData = {};
         
         if (paymentType === 'deposit') {
-            updateData.deposit_paid = (quote.deposit_paid || 0) + amount;
+            updateData.deposit_paid = (parseFloat(quote.deposit_paid) || 0) + amount;
         } else {
-            updateData.final_payment_paid = (quote.final_payment_paid || 0) + amount;
+            updateData.final_payment_paid = (parseFloat(quote.final_payment_paid) || 0) + amount;
         }
 
         // Update payment status
-        const totalPaid = (quote.deposit_paid || 0) + (quote.final_payment_paid || 0) + amount;
-        if (totalPaid >= quote.total_cost) {
+        const totalPaid = (parseFloat(quote.deposit_paid) || 0) + (parseFloat(quote.final_payment_paid) || 0) + amount;
+        if (totalPaid >= parseFloat(quote.total_cost)) {
             updateData.payment_status = 'paid';
         } else if (totalPaid > 0) {
             updateData.payment_status = 'partial';
@@ -1416,233 +1417,22 @@ class VinylQuoteApp {
 
     async exportInvoicePDF(quoteId) {
         const quote = this.savedQuotes.find(q => q.id === quoteId);
-        if (!quote) {
-            this.showError('Quote not found');
-            return;
+        if (!quote) { this.showError('Quote not found'); return; }
+        let c = this.customers.find(x => x.id === quote.customer_id);
+        if (!c && quote.customer_id) {
+            const { data } = await supabase.from('customers').select('*').eq('id', quote.customer_id).single();
+            c = data;
         }
-
-        // Get customer info
-        let customer = null;
-        if (quote.customer_id) {
-            const { data: customerData } = await supabase
-                .from('customers')
-                .select('*')
-                .eq('id', quote.customer_id)
-                .single();
-            customer = customerData;
+        if (!c) {
+            const r = await this.ask({ title: 'Customer details for invoice', fields: [
+                { name: 'name', label: 'Customer name', required: true },
+                { name: 'phone', label: 'Phone (optional)', type: 'tel' },
+                { name: 'email', label: 'Email (optional)', type: 'email' },
+                { name: 'address', label: 'Address (optional)', multiline: true }], okText: 'Create invoice PDF' });
+            if (!r) return;
+            c = r;
         }
-
-        // If no customer linked, prompt for manual entry
-        if (!customer) {
-            const customerName = prompt('Enter customer name:');
-            if (!customerName || customerName.trim() === '') {
-                this.showError('Customer name is required for invoice');
-                return;
-            }
-
-            const customerPhone = prompt('Enter customer phone (optional):');
-            const customerEmail = prompt('Enter customer email (optional):');
-            const customerAddress = prompt('Enter customer address (optional):');
-
-            // Create temporary customer object for invoice
-            customer = {
-                name: customerName.trim(),
-                phone: customerPhone ? customerPhone.trim() : null,
-                email: customerEmail ? customerEmail.trim() : null,
-                address: customerAddress ? customerAddress.trim() : null
-            };
-        }
-
-        try {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-
-            const pageWidth = doc.internal.pageSize.width;
-            const margin = 15;
-            const contentWidth = pageWidth - (margin * 2);
-            let yPosition = margin;
-
-            // Company header
-            doc.setFontSize(24);
-            doc.setFont(undefined, 'bold');
-            doc.setTextColor(102, 126, 234);
-            doc.text('INVOICE', pageWidth / 2, yPosition, { align: 'center' });
-            yPosition += 15;
-
-            // Invoice number and date
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            doc.setTextColor(0, 0, 0);
-            doc.text(`Invoice #: ${quote.invoice_number || 'N/A'}`, margin, yPosition);
-            doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - margin, yPosition, { align: 'right' });
-            yPosition += 10;
-
-            // Line separator
-            doc.setLineWidth(0.5);
-            doc.line(margin, yPosition, pageWidth - margin, yPosition);
-            yPosition += 10;
-
-            // From section
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.text('FROM:', margin, yPosition);
-            yPosition += 6;
-
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            doc.text('Kitchen Wrap Masters', margin, yPosition);
-            yPosition += 5;
-            doc.text('Professional Kitchen Vinyl Wrapping', margin, yPosition);
-            yPosition += 5;
-            doc.text('Email: info@kitchenwrapmasters.co.za', margin, yPosition);
-            yPosition += 10;
-
-            // To section
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.text('BILL TO:', margin, yPosition);
-            yPosition += 6;
-
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            doc.text(customer.name, margin, yPosition);
-            yPosition += 5;
-            if (customer.phone) {
-                doc.text(`Phone: ${customer.phone}`, margin, yPosition);
-                yPosition += 5;
-            }
-            if (customer.email) {
-                doc.text(`Email: ${customer.email}`, margin, yPosition);
-                yPosition += 5;
-            }
-            if (customer.address) {
-                doc.text(`Address: ${customer.address}`, margin, yPosition);
-                yPosition += 5;
-            }
-            yPosition += 10;
-
-            // Project details
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.text('PROJECT DETAILS:', margin, yPosition);
-            yPosition += 6;
-
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            doc.text(`Project: ${quote.quote_name}`, margin, yPosition);
-            yPosition += 5;
-
-            doc.text(`Duration: ${quote.project_days} day(s)`, margin, yPosition);
-            yPosition += 10;
-
-            // Line separator
-            doc.setLineWidth(0.5);
-            doc.line(margin, yPosition, pageWidth - margin, yPosition);
-            yPosition += 10;
-
-            // Service description box
-            doc.setFillColor(245, 245, 245);
-            doc.rect(margin, yPosition, contentWidth, 35, 'F');
-            
-            doc.setFontSize(11);
-            doc.setFont(undefined, 'bold');
-            doc.setTextColor(0, 0, 0);
-            doc.text('SERVICE PROVIDED:', margin + 5, yPosition + 8);
-            
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-        
-            doc.text('Includes: Materials, Installation, Labour & All Associated Costs', margin + 5, yPosition + 27);
-            yPosition += 40;
-
-            // Total amount box
-            doc.setFillColor(102, 126, 234);
-            doc.rect(margin, yPosition, contentWidth, 12, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            doc.text('TOTAL AMOUNT:', margin + 5, yPosition + 8);
-            doc.text(`R${parseFloat(quote.total_cost).toFixed(2)}`, pageWidth - margin - 5, yPosition + 8, { align: 'right' });
-            yPosition += 17;
-
-            // Payment information - ensure all values are numbers
-            const totalCost = parseFloat(quote.total_cost) || 0;
-            const depositAmount = totalCost * 0.5;
-            const depositPaid = parseFloat(quote.deposit_paid) || 0;
-            const finalPaymentPaid = parseFloat(quote.final_payment_paid) || 0;
-            const totalPaid = depositPaid + finalPaymentPaid;
-            const amountDue = totalCost - totalPaid;
-
-            // Reset text color to black before payment section
-            doc.setTextColor(0, 0, 0);
-            
-            doc.setFillColor(245, 245, 245);
-            doc.rect(margin, yPosition, contentWidth, 25, 'F');
-
-            doc.setFont(undefined, 'normal');
-            doc.setFontSize(10);
-            doc.text('50% Deposit Required:', margin + 5, yPosition + 6);
-            doc.text(`R${depositAmount.toFixed(2)}`, pageWidth - margin - 5, yPosition + 6, { align: 'right' });
-
-            doc.text('Amount Paid:', margin + 5, yPosition + 12);
-            doc.text(`R${totalPaid.toFixed(2)}`, pageWidth - margin - 5, yPosition + 12, { align: 'right' });
-
-            doc.setFont(undefined, 'bold');
-            doc.setFontSize(12);
-            doc.setTextColor(220, 53, 69);
-            doc.text('AMOUNT DUE:', margin + 5, yPosition + 20);
-            doc.text(`R${amountDue.toFixed(2)}`, pageWidth - margin - 5, yPosition + 20, { align: 'right' });
-            yPosition += 30;
-
-            // Payment status
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(10);
-            const paymentStatus = quote.payment_status === 'paid' ? 'PAID IN FULL' : 
-                                 quote.payment_status === 'partial' ? 'PARTIALLY PAID' : 'UNPAID';
-            const statusColor = quote.payment_status === 'paid' ? [40, 167, 69] : 
-                               quote.payment_status === 'partial' ? [255, 193, 7] : [220, 53, 69];
-            
-            doc.setFillColor(...statusColor);
-            doc.rect(margin, yPosition, contentWidth, 8, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFont(undefined, 'bold');
-            doc.text(`Payment Status: ${paymentStatus}`, pageWidth / 2, yPosition + 6, { align: 'center' });
-            yPosition += 15;
-
-            // Terms
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'bold');
-            doc.text('PAYMENT TERMS:', margin, yPosition);
-            yPosition += 5;
-
-            doc.setFont(undefined, 'normal');
-            doc.setFontSize(8);
-            doc.text('• 50% deposit required before work commences', margin, yPosition);
-            yPosition += 4;
-            doc.text('• Final payment due upon completion', margin, yPosition);
-            yPosition += 4;
-            doc.text('• Payment methods: Cash, Card, EFT', margin, yPosition);
-            yPosition += 10;
-
-            // Footer
-            // // doc.setFillColor(102, 126, 234);
-            // doc.rect(0, pageWidth - 20, pageWidth, 20, 'F');
-            // doc.setTextColor(255, 255, 255);
-            // doc.setFontSize(10);
-            // doc.text('Thank you for your business!', pageWidth / 2, pageWidth - 12, { align: 'center' });
-            // doc.setFontSize(8);
-            // doc.text('Kitchen Wrap Masters - Professional Kitchen Vinyl Wrapping Services', pageWidth / 2, pageWidth - 7, { align: 'center' });
-
-            // Save
-            const filename = `Invoice_${quote.invoice_number || quote.id}_${customer.name.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-            doc.save(filename);
-
-            this.showSuccess('Invoice PDF downloaded successfully!');
-        } catch (error) {
-            console.error('Invoice PDF error:', error);
-            this.showError('Failed to generate invoice PDF');
-        }
+        await this.buildPDF('invoice', quote, c);
     }
 
     async loadSavedQuotes() {
@@ -1711,10 +1501,10 @@ class VinylQuoteApp {
             <div class="saved-quote-item" data-quote-id="${quote.id}">
                 <div class="quote-header">
                     <div class="quote-title-row">
-                        <div class="quote-title">${quote.quote_name}</div>
+                        <div class="quote-title">${esc(quote.quote_name)}</div>
                         <span class="status-badge status-${quote.status || 'pending'}">${this.getStatusLabel(quote.status || 'pending')}</span>
                     </div>
-                    <div class="quote-date">${new Date(quote.created_at).toLocaleDateString()}</div>
+                    <div class="quote-date">${this.customerLabel(quote)}${new Date(quote.created_at).toLocaleDateString('en-ZA')}</div>
                 </div>
                 
                 <div class="quote-summary">
@@ -1728,7 +1518,7 @@ class VinylQuoteApp {
                     </div>
                     <div class="quote-detail">
                         <span>Material:</span>
-                        <span>${quote.material_name}</span>
+                        <span>${esc(quote.material_name)}</span>
                     </div>
                     <div class="quote-detail">
                         <span>Duration:</span>
@@ -1737,13 +1527,13 @@ class VinylQuoteApp {
                     ${quote.scheduled_date ? `
                     <div class="quote-detail scheduled-date-detail">
                         <span>📅 Scheduled:</span>
-                        <span>${new Date(quote.scheduled_date).toLocaleDateString()}</span>
+                        <span>${new Date(quote.scheduled_date).toLocaleDateString('en-ZA')}</span>
                     </div>
                     ` : ''}
                 </div>
                 
                 <div class="quote-total">
-                    Total: R${parseFloat(quote.total_cost).toFixed(2)}
+                    Total: ${fmtR(parseFloat(quote.total_cost))}
                     ${quote.payment_status && quote.payment_status !== 'unpaid' ? `
                         <span class="payment-badge payment-${quote.payment_status}">${quote.payment_status === 'paid' ? 'Paid' : 'Partial'}</span>
                     ` : ''}
@@ -1815,8 +1605,8 @@ class VinylQuoteApp {
                 <div class="modal-photos-grid">
                     ${photos.map(photo => `
                         <div class="modal-photo-item">
-                            <img src="${photo.photo_url}" alt="${photo.photo_name}" onclick="window.open('${photo.photo_url}', '_blank')">
-                            <span class="modal-photo-name">${photo.photo_name}</span>
+                            <a href="${esc(photo.photo_url)}" target="_blank" rel="noopener"><img src="${esc(photo.photo_url)}" alt="${esc(photo.photo_name)}"></a>
+                            <span class="modal-photo-name">${esc(photo.photo_name)}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -1829,8 +1619,8 @@ class VinylQuoteApp {
                 <div class="modal-custom-items">
                     ${customItems.map(item => `
                         <div class="modal-custom-item">
-                            <span>${item.description}</span>
-                            <span class="item-amount">R${parseFloat(item.amount).toFixed(2)}</span>
+                            <span>${esc(item.description)}</span>
+                            <span class="item-amount">${fmtR(parseFloat(item.amount))}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -1841,11 +1631,11 @@ class VinylQuoteApp {
             <div class="modal-section">
                 <h3>👤 Customer Information</h3>
                 <div class="modal-customer-info">
-                    <p><strong>Name:</strong> ${customer.name}</p>
-                    ${customer.phone ? `<p><strong>Phone:</strong> ${customer.phone}</p>` : ''}
-                    ${customer.email ? `<p><strong>Email:</strong> ${customer.email}</p>` : ''}
-                    ${customer.address ? `<p><strong>Address:</strong> ${customer.address}</p>` : ''}
-                    ${customer.notes ? `<p><strong>Notes:</strong> ${customer.notes}</p>` : ''}
+                    <p><strong>Name:</strong> ${esc(customer.name)}</p>
+                    ${customer.phone ? `<p><strong>Phone:</strong> ${esc(customer.phone)}</p>` : ''}
+                    ${customer.email ? `<p><strong>Email:</strong> ${esc(customer.email)}</p>` : ''}
+                    ${customer.address ? `<p><strong>Address:</strong> ${esc(customer.address)}</p>` : ''}
+                    ${customer.notes ? `<p><strong>Notes:</strong> ${esc(customer.notes)}</p>` : ''}
                 </div>
             </div>
         ` : '';
@@ -1854,7 +1644,7 @@ class VinylQuoteApp {
             <div class="modal-overlay" id="quote-details-modal">
                 <div class="modal-content quote-details-modal-content">
                     <div class="modal-header">
-                        <h2 class="modal-title">${quote.quote_name}</h2>
+                        <h2 class="modal-title">${esc(quote.quote_name)}</h2>
                         <button class="close-modal-btn" onclick="app.closeQuoteDetailsModal()">&times;</button>
                     </div>
                     
@@ -1876,7 +1666,7 @@ class VinylQuoteApp {
                               
                                 <div class="detail-item">
                                     <span class="detail-label">Material:</span>
-                                    <span class="detail-value">${quote.material_name}</span>
+                                    <span class="detail-value">${esc(quote.material_name)}</span>
                                 </div>
                                 <div class="detail-item">
                                     <span class="detail-label">Material Rate:</span>
@@ -1889,7 +1679,7 @@ class VinylQuoteApp {
                                 ${quote.scheduled_date ? `
                                 <div class="detail-item">
                                     <span class="detail-label">📅 Scheduled:</span>
-                                    <span class="detail-value">${new Date(quote.scheduled_date).toLocaleDateString()}</span>
+                                    <span class="detail-value">${new Date(quote.scheduled_date).toLocaleDateString('en-ZA')}</span>
                                 </div>
                                 ` : ''}
                             </div>
@@ -1900,29 +1690,29 @@ class VinylQuoteApp {
                             <div class="modal-cost-breakdown">
                                 <div class="cost-item">
                                     <span>Material Cost:</span>
-                                    <span>R${parseFloat(quote.material_cost).toFixed(2)}</span>
+                                    <span>${fmtR(parseFloat(quote.material_cost))}</span>
                                 </div>
                                 <div class="cost-item">
                                     <span>Installation Fee:</span>
-                                    <span>R${parseFloat(quote.installation_fee).toFixed(2)}</span>
+                                    <span>${fmtR(parseFloat(quote.installation_fee))}</span>
                                 </div>
                                 <div class="cost-item">
                                     <span>Food Cost:</span>
-                                    <span>R${parseFloat(quote.food_cost).toFixed(2)}</span>
+                                    <span>${fmtR(parseFloat(quote.food_cost))}</span>
                                 </div>
                                 <div class="cost-item">
                                     <span>Transport Cost:</span>
-                                    <span>R${parseFloat(quote.transport_cost).toFixed(2)}</span>
+                                    <span>${fmtR(parseFloat(quote.transport_cost))}</span>
                                 </div>
-                                ${quote.custom_items_total > 0 ? `
+                                ${parseFloat(quote.custom_items_total) !== 0 ? `
                                 <div class="cost-item">
                                     <span>Additional Charges:</span>
-                                    <span>R${parseFloat(quote.custom_items_total).toFixed(2)}</span>
+                                    <span>${fmtR(parseFloat(quote.custom_items_total))}</span>
                                 </div>
                                 ` : ''}
                                 <div class="cost-item cost-total">
                                     <span><strong>Total:</strong></span>
-                                    <span><strong>R${parseFloat(quote.total_cost).toFixed(2)}</strong></span>
+                                    <span><strong>${fmtR(parseFloat(quote.total_cost))}</strong></span>
                                 </div>
                             </div>
                         </div>
@@ -1957,8 +1747,9 @@ class VinylQuoteApp {
         const quote = this.savedQuotes.find(q => q.id === quoteId);
         if (!quote) return;
 
-        const newName = prompt('Enter new quote name:', quote.quote_name);
-        if (!newName || newName.trim() === '') return;
+        const r = await this.ask({ title: 'Rename quote', fields: [{ name: 'name', label: 'Quote name', value: quote.quote_name, required: true }], okText: 'Save' });
+        if (!r) return;
+        const newName = r.name;
 
         try {
             const { error } = await supabase
@@ -1993,7 +1784,7 @@ class VinylQuoteApp {
 
         // Special confirmation for marking as completed
         if (newStatus === 'completed') {
-            if (!confirm('Mark this project as completed? It will be moved to History.')) {
+            if (!await this.confirmBox('Mark this project as completed? It will be moved to History.')) {
                 return;
             }
         }
@@ -2022,7 +1813,7 @@ class VinylQuoteApp {
     }
 
     async deleteQuote(quoteId) {
-        if (!confirm('Are you sure you want to delete this quote?')) return;
+        if (!await this.confirmBox('Are you sure you want to delete this quote?')) return;
 
         try {
             const { error } = await supabase
@@ -2042,72 +1833,105 @@ class VinylQuoteApp {
         }
     }
 
-    showError(message) {
-        // Remove existing messages
+    recalcIfShown() { if (this.currentQuote) this.calculateQuote(true); }
+
+    renderMaterials() {
+        document.querySelector('.material-options').innerHTML = PRICING.materials.map(m =>
+            `<label class="material-option"><input type="radio" name="material" value="${m.id}" data-rate="${m.rate}"><span>${esc(m.name)} - R${m.rate} per m²</span></label>`).join('');
+        document.getElementById('material-filter').insertAdjacentHTML('beforeend', PRICING.materials.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join(''));
+    }
+
+    customerLabel(q, deco = true) {
+        const c = this.customers.find(x => x.id === q.customer_id);
+        if (!c) return '';
+        return deco ? `👤 ${esc(c.name)} · ` : c.name;
+    }
+
+    exportCSV() {
+        const q = this.savedQuotes;
+        if (!q.length) { this.showError('No quotes to export'); return; }
+        const cols = ['quote_name','status','created_at','scheduled_date','doors','square_metres','material_name','material_cost','installation_fee','food_cost','transport_cost','custom_items_total','total_cost','payment_status','deposit_paid','final_payment_paid','invoice_number'];
+        const cell = v => { v = v == null ? '' : String(v); if (/^[=+@]|^-(?!\d)/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+        const rows = [['customer', ...cols].map(cell).join(',')].concat(q.map(r => [this.customerLabel(r, false), ...cols.map(c => r[c])].map(cell).join(',')));
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+        a.download = `quotes_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    async compressImage(file) {
+        if (!file.type.startsWith('image/') || file.size < 300 * 1024) return file;
+        try {
+            const bmp = await createImageBitmap(file);
+            const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+            const c = document.createElement('canvas');
+            c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+            c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+            const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.8));
+            if (!blob || blob.size >= file.size) return file;
+            return new File([blob], file.name.replace(/\.\w+$/, '').replace(/[^\w-]/g, '_') + '.jpg', { type: 'image/jpeg' });
+        } catch (e) { return file; }
+    }
+
+    toast(message, type) {
         this.clearMessages();
-
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'error-message';
-        errorDiv.textContent = message;
-
-        // Add to current visible section
-        const activeSection = document.querySelector('.quote-container:not(.hidden), .auth-container:not(.hidden), .saved-quotes-container:not(.hidden)');
-        if (activeSection) {
-            activeSection.insertBefore(errorDiv, activeSection.firstChild);
-        }
-
-        setTimeout(() => errorDiv.remove(), 5000);
+        let root = document.getElementById('toast-root');
+        if (!root) { root = document.createElement('div'); root.id = 'toast-root'; document.body.appendChild(root); }
+        const d = document.createElement('div');
+        d.className = type + '-message';
+        d.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        d.textContent = message;
+        root.appendChild(d);
+        if (type !== 'loading') setTimeout(() => d.remove(), type === 'error' ? 5000 : 3000);
     }
 
-    showSuccess(message) {
-        // Remove existing messages
-        this.clearMessages();
+    showError(message) { this.toast(message, 'error'); }
+    showSuccess(message) { this.toast(message, 'success'); }
+    showLoading(message = 'Saving...') { this.toast(message, 'loading'); }
+    clearMessages() { document.querySelectorAll('#toast-root > div').forEach(n => n.remove()); }
+    hideLoading() { document.querySelectorAll('#toast-root > .loading-message').forEach(n => n.remove()); }
 
-        const successDiv = document.createElement('div');
-        successDiv.className = 'success-message';
-        successDiv.textContent = message;
-
-        // Add to current visible section
-        const activeSection = document.querySelector('.quote-container:not(.hidden), .auth-container:not(.hidden), .saved-quotes-container:not(.hidden)');
-        if (activeSection) {
-            activeSection.insertBefore(successDiv, activeSection.firstChild);
-        }
-
-        setTimeout(() => successDiv.remove(), 3000);
+    // Promise-based dialog. Resolves to {fieldName: value} on OK, or null on cancel/Esc.
+    ask({ title, message = '', fields = [], okText = 'OK', cancelText = 'Cancel' }) {
+        return new Promise(resolve => {
+            const ov = document.createElement('div');
+            ov.className = 'modal-overlay';
+            ov.setAttribute('role', 'dialog');
+            ov.setAttribute('aria-modal', 'true');
+            const rows = fields.map((f, i) => {
+                const v = esc(f.value ?? '');
+                const input = f.multiline
+                    ? `<textarea id="dlg-${i}" rows="3">${v}</textarea>`
+                    : `<input id="dlg-${i}" type="${f.type || 'text'}" ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} value="${v}">`;
+                return `<label class="dialog-label" for="dlg-${i}">${esc(f.label)}${f.required ? ' *' : ''}</label>${input}`;
+            }).join('');
+            ov.innerHTML = `<div class="modal-content"><div class="modal-header"><h2 class="modal-title">${esc(title)}</h2></div>`
+                + (message ? `<p class="dialog-message">${esc(message)}</p>` : '')
+                + `<form class="modal-form">${rows}<div class="modal-actions"><button type="submit" class="modal-save-btn">${esc(okText)}</button>`
+                + `<button type="button" class="modal-cancel-btn">${esc(cancelText)}</button></div></form></div>`;
+            document.body.appendChild(ov);
+            const form = ov.querySelector('form');
+            const onKey = e => { if (e.key === 'Escape') done(null); };
+            const done = v => { document.removeEventListener('keydown', onKey); ov.remove(); resolve(v); };
+            document.addEventListener('keydown', onKey);
+            ov.querySelector('.modal-cancel-btn').onclick = () => done(null);
+            form.onsubmit = e => {
+                e.preventDefault();
+                const out = {};
+                for (const [i, f] of fields.entries()) {
+                    const val = form.querySelector('#dlg-' + i).value.trim();
+                    if (f.required && !val) { this.showError(`${f.label} is required`); return; }
+                    out[f.name] = val;
+                }
+                done(out);
+            };
+            (form.querySelector('input,textarea') || form.querySelector('button')).focus();
+        });
     }
 
-    clearMessages() {
-        document.querySelectorAll('.error-message, .success-message, .loading-message').forEach(msg => msg.remove());
-    }
-
-    showLoading(message = 'Saving...') {
-        console.log('showLoading called with message:', message);
-        // Remove existing messages
-        this.clearMessages();
-
-        const loadingDiv = document.createElement('div');
-        loadingDiv.className = 'loading-message';
-        loadingDiv.innerHTML = `
-            <img src="loading.png" alt="Loading" class="loading-icon" />
-            <span>${message}</span>
-        `;
-
-        // Add to current visible section
-        const activeSection = document.querySelector('.quote-container:not(.hidden), .auth-container:not(.hidden), .saved-quotes-container:not(.hidden), .customers-container:not(.hidden)');
-        console.log('Active section found:', activeSection);
-        if (activeSection) {
-            activeSection.insertBefore(loadingDiv, activeSection.firstChild);
-            console.log('Loading message inserted');
-        } else {
-            console.error('No active section found for loading message');
-        }
-    }
-
-    hideLoading() {
-        console.log('hideLoading called');
-        const loadingMessages = document.querySelectorAll('.loading-message');
-        console.log('Found loading messages to remove:', loadingMessages.length);
-        loadingMessages.forEach(msg => msg.remove());
+    async confirmBox(message) {
+        return !!(await this.ask({ title: 'Please confirm', message, okText: 'Yes', cancelText: 'No' }));
     }
 
     resetQuote() {
@@ -2135,8 +1959,13 @@ class VinylQuoteApp {
         this.uploadedPhotos = [];
         this.renderPhotoPreview();
 
-        // Clear scheduled date
+        // Clear scheduled date and the rest of the quote form
         document.getElementById('scheduled-date-input').value = '';
+        document.getElementById('quote-name-input').value = '';
+        document.getElementById('quote-status-select').value = 'pending';
+        document.getElementById('customer-select').value = '';
+        this.handleCustomerSelection();
+        this.currentQuote = null;
     }
 
     // Search and Filter Methods
@@ -2153,7 +1982,8 @@ class VinylQuoteApp {
             // Search filter
             const matchesSearch = !searchTerm ||
                 quote.quote_name.toLowerCase().includes(searchTerm) ||
-                quote.material_name.toLowerCase().includes(searchTerm);
+                quote.material_name.toLowerCase().includes(searchTerm) ||
+                this.customerLabel(quote, false).toLowerCase().includes(searchTerm);
 
             // Material filter
             const matchesMaterial = !materialFilter || quote.material_name === materialFilter;
@@ -2204,448 +2034,192 @@ class VinylQuoteApp {
 
     // PDF Export Methods
     async exportToPDF(type) {
-        const quotesToExport = type === 'all' ? this.savedQuotes : this.filteredQuotes;
-
-        if (quotesToExport.length === 0) {
-            this.showError('No quotes to export');
-            return;
-        }
-
-        // Get customer information for bulk export
-        const customerName = prompt('Enter customer name (for bulk export):');
-        if (!customerName || customerName.trim() === '') {
-            this.showError('Customer name is required for export');
-            return;
-        }
-
-        const customerLocation = prompt('Enter customer location/address:');
-        if (!customerLocation || customerLocation.trim() === '') {
-            this.showError('Customer location is required for export');
-            return;
-        }
-
-        try {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-
-            // Add logo
-            try {
-                const logoImg = new Image();
-                logoImg.onload = () => {
-                    this.generateBulkQuotePDF(doc, quotesToExport, type, customerName.trim(), customerLocation.trim(), logoImg);
-                };
-                logoImg.onerror = () => {
-                    this.generateBulkQuotePDF(doc, quotesToExport, type, customerName.trim(), customerLocation.trim(), null);
-                };
-                logoImg.src = 'logo.jpg';
-            } catch (error) {
-                this.generateBulkQuotePDF(doc, quotesToExport, type, customerName.trim(), customerLocation.trim(), null);
-            }
-
-        } catch (error) {
-            console.error('PDF export error:', error);
-            this.showError('Failed to export PDF. Please try again.');
-        }
-    }
-
-    generateBulkQuotePDF(doc, quotesToExport, type, customerName, customerLocation, logoImg) {
-        const pageWidth = doc.internal.pageSize.width;
-        const pageHeight = doc.internal.pageSize.height;
-        const margin = 20;
-        const contentWidth = pageWidth - (margin * 2);
-        let yPosition = margin;
-
-        // Add logo if available
-        if (logoImg) {
-            try {
-                doc.addImage(logoImg, 'JPEG', margin, yPosition, 35, 25);
-                yPosition = Math.max(yPosition + 30, yPosition);
-            } catch (error) {
-                console.log('Could not add logo to PDF');
-            }
-        }
-
-        // Company header
-        doc.setFontSize(22);
-        doc.setFont(undefined, 'bold');
-        doc.text('KITCHEN WRAP MASTERS', logoImg ? 65 : margin, logoImg ? 35 : yPosition);
-        yPosition += logoImg ? 12 : 20;
-
-        doc.setFontSize(12);
-        doc.setFont(undefined, 'normal');
-        doc.text('Professional Kitchen Vinyl Wrapping Services', logoImg ? 65 : margin, yPosition);
-        yPosition += 25;
-
-        // Header line
-        doc.setLineWidth(0.5);
-        doc.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 15;
-
-        // Document title and info in header box
-        doc.setFillColor(245, 245, 245);
-        doc.rect(margin, yPosition, contentWidth, 30, 'F');
-        
-        doc.setFontSize(16);
-        doc.setFont(undefined, 'bold');
-        doc.text('QUOTATION SUMMARY', margin + 10, yPosition + 12);
-        
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        doc.text(`Customer: ${customerName}`, margin + 10, yPosition + 22);
-        doc.text(`Location: ${customerLocation}`, margin + 10, yPosition + 28);
-        doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth - 80, yPosition + 22);
-        doc.text(`Total Quotes: ${quotesToExport.length}`, pageWidth - 80, yPosition + 28);
-        yPosition += 45;
-
-        quotesToExport.forEach((quote, index) => {
-            // Check if we need a new page (leave space for quote content)
-            if (yPosition > pageHeight - 80) {
-                doc.addPage();
-                yPosition = margin + 20;
-                
-                // Add company header on new page
-                doc.setFontSize(16);
-                doc.setFont(undefined, 'bold');
-                doc.text('KITCHEN WRAP MASTERS', margin, yPosition);
-                doc.setFontSize(10);
-                doc.setFont(undefined, 'normal');
-                doc.text('Professional Kitchen Vinyl Wrapping Services', margin, yPosition + 8);
-                yPosition += 25;
-            }
-
-            // Quote header with background
-            doc.setFillColor(250, 250, 250);
-            doc.rect(margin, yPosition, contentWidth, 15, 'F');
-            
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.text(`${index + 1}. ${quote.quote_name}`, margin + 5, yPosition + 10);
-
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'normal');
-            doc.text(`Date: ${new Date(quote.created_at).toLocaleDateString()}`, pageWidth - 60, yPosition + 10);
-
-            yPosition += 20;
-
-            // Quote details in organized table format
-            const leftCol = margin + 5;
-            const midCol = margin + 90;
-            const rightCol = margin + 140;
-            
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'normal');
-
-            // Project info
-            doc.text(`Doors: ${quote.doors}`, leftCol, yPosition);
-            doc.text(`Sqm: ${quote.square_metres}`, midCol, yPosition);
-            doc.text(`Days: ${quote.project_days}`, rightCol, yPosition);
-            yPosition += 6;
-
-            // Material info
-            doc.text(`Material: ${quote.material_name}`, leftCol, yPosition);
-            yPosition += 6;
-
-            // Cost breakdown in columns
-            doc.text(`Material: R${parseFloat(quote.material_cost).toFixed(2)}`, leftCol, yPosition);
-            doc.text(`Install: R${parseFloat(quote.installation_fee).toFixed(2)}`, midCol, yPosition);
-            doc.text(`Food: R${parseFloat(quote.food_cost).toFixed(2)}`, rightCol, yPosition);
-            yPosition += 6;
-
-            doc.text(`Transport: R${parseFloat(quote.transport_cost).toFixed(2)}`, leftCol, yPosition);
-            yPosition += 10;
-
-            // Total with emphasis
-            doc.setFillColor(240, 240, 240);
-            doc.rect(margin, yPosition, contentWidth, 12, 'F');
-            doc.setFontSize(11);
-            doc.setFont(undefined, 'bold');
-            doc.text(`TOTAL: R${parseFloat(quote.total_cost).toFixed(2)}`, leftCol, yPosition + 8);
-            yPosition += 20;
-
-            // Separator line
-            doc.setLineWidth(0.3);
-            doc.line(margin, yPosition, pageWidth - margin, yPosition);
-            yPosition += 10;
-        });
-
-        // Add footer section
-        if (yPosition > pageHeight - 60) {
-            doc.addPage();
-            yPosition = margin + 20;
-        }
-
-        yPosition += 10;
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text('TERMS & CONDITIONS', margin, yPosition);
-        yPosition += 8;
-
-        doc.setLineWidth(0.3);
-        doc.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 10;
-
-        doc.setFontSize(8);
-        doc.setFont(undefined, 'normal');
-        const terms = [
-            '• All quotes valid for 30 days from date of issue',
-            '• 50% deposit required to commence work',
-            '• Final payment due upon completion',
-            '• Materials include manufacturer warranty',
-            '• Professional installation guaranteed'
-        ];
-
-        terms.forEach(term => {
-            doc.text(term, margin + 5, yPosition);
-            yPosition += 5;
-        });
-
-        // Footer with company branding
-        yPosition += 10;
-        doc.setFillColor(102, 126, 234);
-        doc.rect(margin, yPosition, contentWidth, 20, 'F');
-        
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text('Thank you for choosing Kitchen Wrap Masters!', margin + 10, yPosition + 12);
-        
-        // Reset text color
-        doc.setTextColor(0, 0, 0);
-
-        // Save the PDF
-        const filename = `${customerName.replace(/[^a-z0-9]/gi, '_')}_${type === 'all' ? 'all' : 'filtered'}_quotes.pdf`;
-        doc.save(filename);
-
-        this.showSuccess(`PDF exported successfully: ${filename}`);
+        const list = type === 'all' ? this.savedQuotes : this.filteredQuotes;
+        if (!list.length) { this.showError('No quotes to export'); return; }
+        const r = await this.ask({ title: 'Bulk export', message: 'Which customer are these quotes for?', fields: [
+            { name: 'name', label: 'Customer name', required: true },
+            { name: 'address', label: 'Location / address', multiline: true }], okText: 'Export PDF' });
+        if (!r) return;
+        await this.buildSummaryPDF(list, r);
     }
 
     async exportSingleQuote(quoteId) {
         const quote = this.savedQuotes.find(q => q.id === quoteId);
-        if (!quote) {
-            this.showError('Quote not found');
-            return;
-        }
+        if (!quote) { this.showError('Quote not found'); return; }
+        const l = this.customers.find(c => c.id === quote.customer_id) || {};
+        const r = await this.ask({ title: 'Quote details', fields: [
+            { name: 'name', label: 'Customer name', value: l.name || '', required: true },
+            { name: 'address', label: 'Address (one line per row)', value: l.address || '', multiline: true },
+            { name: 'phone', label: 'Phone (optional)', value: l.phone || '', type: 'tel' },
+            { name: 'email', label: 'Email (optional)', value: l.email || '', type: 'email' },
+            { name: 'colour', label: 'Colour / finish chosen', required: true }], okText: 'Export PDF' });
+        if (!r) return;
+        await this.buildPDF('quote', quote, r);
+    }
 
-        // Get customer information
-        const customerName = prompt('Enter customer name:');
-        if (!customerName || customerName.trim() === '') {
-            this.showError('Customer name is required for export');
-            return;
-        }
+    loadLogo() {
+        if (this._logo !== undefined) return Promise.resolve(this._logo);
+        return new Promise(res => { const i = new Image(); i.onload = () => res(this._logo = i); i.onerror = () => res(this._logo = null); i.src = 'logo.png'; });
+    }
 
-        const customerLocation = prompt('Enter customer location/address:');
-        if (!customerLocation || customerLocation.trim() === '') {
-            this.showError('Customer location is required for export');
-            return;
-        }
+    pdfHead(doc, logo, title, meta) {
+        if (typeof LOGO_DATA !== 'undefined') { try { doc.addImage(LOGO_DATA, 'PNG', 15, 10, 62, 62 * LOGO_RATIO); } catch (e) { console.error('Logo skipped', e); } }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(24); doc.setTextColor(...DARK);
+        doc.text(title, 195, 22, { align: 'right' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GREY);
+        meta.forEach((m, i) => doc.text(m, 195, 29 + i * 5, { align: 'right' }));
+        doc.setFillColor(...DARK); doc.rect(15, 42, 120, 1.2, 'F');
+        doc.setFillColor(...ORANGE); doc.rect(135, 42, 60, 1.2, 'F');
+        return 52;
+    }
 
-        const colorChosen = prompt('Enter the color/finish chosen by customer:');
-        if (!colorChosen || colorChosen.trim() === '') {
-            this.showError('Color/finish is required for export');
-            return;
-        }
+    pdfParties(doc, y, label, c) {
+        const col = (x, head, lines) => {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...ORANGE); doc.text(head, x, y);
+            let yy = y + 5.5;
+            lines.forEach((l, i) => {
+                doc.setFont('helvetica', i === 0 ? 'bold' : 'normal'); doc.setFontSize(i === 0 ? 11 : 9.5); doc.setTextColor(...(i === 0 ? DARK : GREY));
+                doc.splitTextToSize(String(l), 80).forEach(s => { doc.text(s, x, yy); yy += 4.8; });
+            });
+            return yy;
+        };
+        const y1 = col(15, label, [c.name, ...(c.address ? c.address.split('\n') : []), c.phone, c.email].filter(Boolean));
+        const y2 = col(115, 'FROM', [BUSINESS.name, BUSINESS.area, BUSINESS.phone, BUSINESS.email]);
+        return Math.max(y1, y2) + 4;
+    }
 
-        try {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-
-            // Add logo
-            try {
-                const logoImg = new Image();
-                logoImg.onload = () => {
-                    this.generateSingleQuotePDF(doc, quote, customerName.trim(), customerLocation.trim(), colorChosen.trim(), logoImg);
-                };
-                logoImg.onerror = () => {
-                    this.generateSingleQuotePDF(doc, quote, customerName.trim(), customerLocation.trim(), colorChosen.trim(), null);
-                };
-                logoImg.src = 'logo.jpg';
-            } catch (error) {
-                this.generateSingleQuotePDF(doc, quote, customerName.trim(), customerLocation.trim(), colorChosen.trim(), null);
-            }
-
-        } catch (error) {
-            console.error('PDF export error:', error);
-            this.showError('Failed to export quote. Please try again.');
+    pdfFoot(doc) {
+        const n = doc.getNumberOfPages();
+        for (let i = 1; i <= n; i++) {
+            doc.setPage(i);
+            doc.setFillColor(...ORANGE); doc.rect(15, 284, 180, 0.6, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK);
+            doc.text('WRAP IT  •  PROTECT IT  •  LOVE IT', 105, 290, { align: 'center' });
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GREY);
+            doc.text(`${BUSINESS.name}  |  ${BUSINESS.phone}  |  ${BUSINESS.email}`, 15, 294);
+            doc.text(`Page ${i} of ${n}`, 195, 294, { align: 'right' });
         }
     }
 
-    generateSingleQuotePDF(doc, quote, customerName, customerLocation, colorChosen, logoImg) {
-        const pageWidth = doc.internal.pageSize.width;
-        const pageHeight = doc.internal.pageSize.height;
-        const margin = 15;
-        const contentWidth = pageWidth - (margin * 2);
-        let yPosition = margin;
-
-        // Add logo if available (smaller for compact layout)
-        if (logoImg) {
-            try {
-                doc.addImage(logoImg, 'JPEG', margin, yPosition, 30, 20);
-                yPosition = Math.max(yPosition + 25, yPosition);
-            } catch (error) {
-                console.log('Could not add logo to PDF');
+    async buildPDF(kind, quote, c) {
+        try {
+            const { jsPDF } = window.jspdf, doc = new jsPDF(), inv = kind === 'invoice', num = v => parseFloat(v) || 0;
+            const total = num(quote.total_cost), extra = num(quote.custom_items_total), paid = num(quote.deposit_paid) + num(quote.final_payment_paid);
+            const ref = `KWM-${String(quote.created_at).slice(0, 10).replace(/-/g, '')}-${String(quote.id).slice(-4).toUpperCase()}`;
+            const docNo = inv ? (quote.invoice_number || ref.replace('KWM', 'INV')) : ref;
+            let items = [];
+            if (extra !== 0) {
+                const { data } = await supabase.from('custom_line_items').select('description, amount').eq('quote_id', quote.id);
+                items = data && data.length ? data : [{ description: 'Additional charges', amount: extra }];
             }
-        }
+            const logo = await this.loadLogo(), today = new Date(), day = d => d.toLocaleDateString('en-ZA');
+            const finish = c.colour || '';
+            let y = this.pdfHead(doc, logo, inv ? 'INVOICE' : 'QUOTATION', [`${inv ? 'Invoice' : 'Quote'} no: ${docNo}`, `Date: ${day(today)}`, inv ? `Quote ref: ${ref}` : `Valid until: ${day(new Date(today.getTime() + 30 * 864e5))}`]);
+            y = this.pdfParties(doc, y, inv ? 'BILL TO' : 'PREPARED FOR', c);
+            const need = h => { if (y + h > 276) { doc.addPage(); y = 20; } };
+            const head = t => { need(14); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...ORANGE); doc.text(t, 15, y); doc.setDrawColor(...DARK); doc.setLineWidth(0.3); doc.line(15, y + 1.8, 195, y + 1.8); y += 8; };
 
-        // Company header (more compact)
-        doc.setFontSize(18);
-        doc.setFont(undefined, 'bold');
-        doc.text('KITCHEN WRAP MASTERS', logoImg ? 50 : margin, logoImg ? 25 : yPosition);
-        yPosition += logoImg ? 8 : 15;
+            // project strip
+            doc.setFillColor(...SOFT); doc.rect(15, y, 180, 14, 'F');
+            [['PROJECT', quote.quote_name, 18, 50], ['FINISH', finish, 70, 62], ['DURATION', `${quote.project_days} day(s)`, 135, 28], ['INSTALL DATE', quote.scheduled_date ? day(new Date(quote.scheduled_date + 'T00:00:00')) : 'To be confirmed', 165, 30]].forEach(([l, v, x, w]) => {
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GREY); doc.text(l, x, y + 5);
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...DARK); doc.text((doc.splitTextToSize(String(v || '-'), w)[0] || '-'), x, y + 10.5);
+            });
+            y += 21;
 
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        doc.text('Professional Kitchen Vinyl Wrapping Services', logoImg ? 50 : margin, yPosition);
-        yPosition += 15;
+            // line items
+            doc.setFillColor(...DARK); doc.rect(15, y, 180, 8, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+            doc.text('Qty', 19, y + 5.5); doc.text('Description', 35, y + 5.5); doc.text('Unit price', 158, y + 5.5, { align: 'right' }); doc.text('Total', 191, y + 5.5, { align: 'right' });
+            doc.setFillColor(...ORANGE); doc.rect(15, y + 8, 180, 0.8, 'F'); y += 15;
+            const rows = [{ t: 'Kitchen cabinet wrapping', d: finish, a: total - extra }, ...items.map(i => ({ t: i.description, a: num(i.amount) }))];
+            rows.forEach(r => {
+                const lines = doc.splitTextToSize(String(r.t), 105), h = lines.length * 4.6 + (r.d ? 5 : 0) + 4;
+                need(h);
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...DARK);
+                doc.text('1', 19, y); doc.text(lines, 35, y);
+                if (r.d) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GREY); doc.text(r.d, 35, y + lines.length * 4.6); }
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...DARK);
+                doc.text(fmtR(r.a), 158, y, { align: 'right' }); doc.text(fmtR(r.a), 191, y, { align: 'right' });
+                y += h; doc.setDrawColor(225, 225, 222); doc.setLineWidth(0.2); doc.line(15, y - 2.5, 195, y - 2.5);
+            });
+            y += 4;
 
-        // Header line
-        doc.setLineWidth(0.5);
-        doc.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 10;
+            // totals
+            need(34);
+            const line = (l, v, yy) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...DARK); doc.text(l, 125, yy); doc.text(v, 191, yy, { align: 'right' }); };
+            line('Subtotal', fmtR(total), y);
+            line(inv ? 'Amount paid' : 'Deposit required (50%)', fmtR(inv ? paid : total / 2), y + 6);
+            y += 11;
+            doc.setFillColor(...DARK); doc.rect(120, y, 75, 11, 'F'); doc.setFillColor(...ORANGE); doc.rect(120, y, 2.5, 11, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text(inv ? 'BALANCE DUE' : 'TOTAL', 127, y + 7.2);
+            doc.setFontSize(12); doc.text(fmtR(inv ? Math.max(0, total - paid) : total), 191, y + 7.4, { align: 'right' }); y += 20;
 
-        // Quote title and info in compact header
-        doc.setFillColor(245, 245, 245);
-        doc.rect(margin, yPosition, contentWidth, 20, 'F');
-        
-        doc.setFontSize(14);
-        doc.setFont(undefined, 'bold');
-        doc.text('QUOTATION', margin + 8, yPosition + 8);
-        
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
-        doc.text(`Quote: ${quote.quote_name}`, margin + 8, yPosition + 16);
-        doc.text(`Date: ${new Date(quote.created_at).toLocaleDateString()}`, pageWidth - 60, yPosition + 16);
-        yPosition += 25;
+            if (inv) {
+                const st = quote.payment_status === 'paid' ? ['PAID IN FULL', [40, 167, 69]] : quote.payment_status === 'partial' ? ['PARTIALLY PAID', [230, 150, 0]] : ['UNPAID', [200, 50, 60]];
+                need(12); doc.setFillColor(...st[1]); doc.roundedRect(15, y - 3, 44, 8, 1.5, 1.5, 'F');
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(255, 255, 255); doc.text(st[0], 37, y + 2.3, { align: 'center' }); y += 12;
+            } else {
+                need(30); head('SCOPE OF WORK');
+                BUSINESS.scope.forEach(s => {
+                    need(6); doc.setDrawColor(...ORANGE); doc.setLineWidth(0.6); doc.line(16, y - 1, 17.2, y + 0.3); doc.line(17.2, y + 0.3, 19.6, y - 2.6);
+                    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...DARK); doc.text(s, 23, y); y += 5.2;
+                });
+                y += 3;
+                const ex = doc.splitTextToSize('Please note: ' + BUSINESS.exclusions, 168), bh = ex.length * 4.4 + 6;
+                need(bh + 8); doc.setFillColor(255, 243, 232); doc.rect(15, y, 180, bh, 'F'); doc.setFillColor(...ORANGE); doc.rect(15, y, 1.4, bh, 'F');
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(8.8); doc.setTextColor(...DARK); doc.text(ex, 21, y + 5); y += bh + 8;
+            }
 
-        // Customer information (more compact)
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text('CUSTOMER DETAILS', margin, yPosition);
-        yPosition += 6;
+            // payment details
+            need(52); head('PAYMENT DETAILS');
+            const top = y;
+            BUSINESS.bank.concat([['Reference', docNo]]).forEach(([l, v], i) => {
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GREY); doc.text(l, 15, y + i * 5.2);
+                doc.setFont('helvetica', 'bold'); doc.setTextColor(...DARK); doc.text(v, 50, y + i * 5.2);
+            });
+            const terms = inv ? ['Balance is due on completion of the work.', 'Please use the invoice number as your payment reference.']
+                : [`At least 50% (${fmtR(total / 2)}) is payable upfront for material procurement before work commences.`, 'Quote valid for 30 days from the date of issue.', 'Balance is due on completion of the work.'];
+            let ty = top; doc.setFontSize(8.8);
+            terms.forEach(t => {
+                doc.setFont('helvetica', 'normal'); doc.setTextColor(...DARK); const ls = doc.splitTextToSize(t, 72);
+                doc.setFillColor(...ORANGE); doc.circle(112, ty - 1, 0.7, 'F'); doc.text(ls, 116, ty); ty += ls.length * 4.4 + 1.6;
+            });
+            y = Math.max(top + 6 * 5.2, ty) + 3;
+            const tl = 'Terms and conditions apply: ';
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GREY); doc.text(tl, 15, y);
+            doc.setTextColor(0, 90, 180); doc.textWithLink('kitchenwrapmasters.co.za/pages/termsandconditions.html', 15 + doc.getTextWidth(tl), y, { url: BUSINESS.terms }); y += 10;
 
-        doc.setLineWidth(0.3);
-        doc.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 8;
+            this.pdfFoot(doc);
+            const fn = `${docNo}_${String(c.name).replace(/[^a-z0-9]/gi, '_')}.pdf`;
+            doc.save(fn); this.showSuccess(`${inv ? 'Invoice' : 'Quote'} exported: ${fn}`);
+        } catch (e) { console.error('PDF error', e); this.showError('Failed to create the PDF: ' + (e && e.message ? e.message : e)); }
+    }
 
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        doc.text(`Customer: ${customerName}`, margin + 3, yPosition);
-        yPosition += 6;
-        doc.text(`Location: ${customerLocation}`, margin + 3, yPosition);
-        yPosition += 15;
-
-        // Project details section (simplified)
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text('PROJECT DETAILS', margin, yPosition);
-        yPosition += 6;
-
-        doc.setLineWidth(0.3);
-        doc.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 8;
-
-        // Create a compact table layout
-        const leftCol = margin + 3;
-        const rightCol = margin + 85;
-        
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-
-        // Only show essential project details
-        const projectDetails = [
-
-            ['Duration:', `${quote.project_days} day(s) max`],
-            ['Material:', quote.material_name],
-            ['Color/Finish:', colorChosen]
-        ];
-
-        projectDetails.forEach(([label, value]) => {
-            doc.text(label, leftCol, yPosition);
-            doc.setFont(undefined, 'bold');
-            doc.text(String(value), rightCol, yPosition);
-            doc.setFont(undefined, 'normal');
-            yPosition += 6;
-        });
-
-        // Total cost section with emphasis
-        yPosition += 15;
-        doc.setFillColor(240, 240, 240);
-        doc.rect(margin, yPosition, contentWidth, 18, 'F');
-        
-        doc.setFontSize(13);
-        doc.setFont(undefined, 'bold');
-        doc.text('TOTAL COST FOR VINYL WRAPPING SERVICE:', leftCol, yPosition + 8);
-        yPosition += 12;
-        doc.setFontSize(16);
-        doc.text(`R${parseFloat(quote.total_cost).toFixed(2)}`, leftCol, yPosition + 8);
-        yPosition += 25;
-
-        // Terms and conditions reference
-        yPosition += 10;
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        doc.setTextColor(0, 0, 0);
-        doc.text('Terms & Conditions: ', margin, yPosition);
-        
-        // Website link in blue
-        doc.setTextColor(0, 0, 255);
-        doc.text('https://kitchenwrapmasters.co.za/pages/termsandconditions.html', margin + 45, yPosition);
-        
-        // Deposit information in red
-        yPosition += 8;
-        doc.setTextColor(255, 0, 0);
-        doc.setFontSize(8);
-        doc.text('A 50% deposit may be required to cover material costs. If the deposit has not been paid', margin, yPosition);
-        yPosition += 4;
-        doc.text('in advance, full or partial payment must be made upon our arrival before work begins.', margin, yPosition);
-        
-        // Banking details section
-        yPosition += 10;
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text('BANKING DETAILS', margin, yPosition);
-        yPosition += 6;
-        
-        doc.setLineWidth(0.3);
-        doc.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 6;
-        
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
-        const bankingDetails = [
-            ['Bank:', 'Bidvest Bank Alliance'],
-            ['Branch Code:', '683000'],
-            ['Account Holder:', 'Kitchen Wrap Masters'],
-            ['Account Number:', '78605188211'],
-            ['Account Type:', 'Current']
-        ];
-        
-        bankingDetails.forEach(([label, value]) => {
-            doc.setFont(undefined, 'bold');
-            doc.text(label, margin + 3, yPosition);
-            doc.setFont(undefined, 'normal');
-            doc.text(value, margin + 40, yPosition);
-            yPosition += 5;
-        });
-        
-        // Footer section
-        yPosition += 8;
-        doc.setFillColor(102, 126, 234);
-        doc.rect(margin, yPosition, contentWidth, 20, 'F');
-        
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text('Thank you for choosing Kitchen Wrap Masters!', margin + 10, yPosition + 12);
-        
-        // Reset text color
-        doc.setTextColor(0, 0, 0);
-
-        // Save the PDF
-        const filename = `${customerName.replace(/[^a-z0-9]/gi, '_')}_${quote.quote_name.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-        doc.save(filename);
-
-        this.showSuccess(`Quote exported successfully: ${filename}`);
+    async buildSummaryPDF(quotes, c) {
+        try {
+            const { jsPDF } = window.jspdf, doc = new jsPDF(), logo = await this.loadLogo();
+            let y = this.pdfHead(doc, logo, 'QUOTE SUMMARY', [`Date: ${new Date().toLocaleDateString('en-ZA')}`, `Quotes: ${quotes.length}`]);
+            y = this.pdfParties(doc, y, 'PREPARED FOR', c) + 4;
+            doc.setFillColor(...DARK); doc.rect(15, y, 180, 8, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+            doc.text('Quote', 19, y + 5.5); doc.text('Doors', 150, y + 5.5, { align: 'right' }); doc.text('Total', 191, y + 5.5, { align: 'right' });
+            doc.setFillColor(...ORANGE); doc.rect(15, y + 8, 180, 0.8, 'F'); y += 15;
+            let sum = 0;
+            quotes.forEach(q => {
+                if (y > 268) { doc.addPage(); y = 22; }
+                const t = parseFloat(q.total_cost) || 0; sum += t;
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...DARK);
+                doc.text((doc.splitTextToSize(String(q.quote_name || '-'), 110)[0] || '-'), 19, y); 
+                doc.text(String(q.doors), 150, y, { align: 'right' }); doc.text(fmtR(t), 191, y, { align: 'right' });
+                y += 3; doc.setDrawColor(225, 225, 222); doc.setLineWidth(0.2); doc.line(15, y, 195, y); y += 5;
+            });
+            if (y > 256) { doc.addPage(); y = 22; }
+            y += 4; doc.setFillColor(...DARK); doc.rect(120, y, 75, 11, 'F'); doc.setFillColor(...ORANGE); doc.rect(120, y, 2.5, 11, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.text('TOTAL', 127, y + 7.2); doc.setFontSize(12); doc.text(fmtR(sum), 191, y + 7.4, { align: 'right' });
+            this.pdfFoot(doc);
+            const fn = `${String(c.name).replace(/[^a-z0-9]/gi, '_')}_quote_summary.pdf`;
+            doc.save(fn); this.showSuccess(`PDF exported: ${fn}`);
+        } catch (e) { console.error('PDF error', e); this.showError('Failed to create the PDF: ' + (e && e.message ? e.message : e)); }
     }
 }
 
