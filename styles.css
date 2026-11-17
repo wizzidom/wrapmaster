@@ -2788,3 +2788,75 @@ sktop-specific enhancements */
 #toast-root > div { margin: 8px 0; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2); }
 .dialog-message { white-space: pre-line; color: #555; margin-bottom: 15px; font-size: 14px; }
 .dialog-label { font-size: 13px; font-weight: bold; color: #333; margin-bottom: -8px; }
+
+/* Job planning */
+#pj-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.pj-chip { padding: 8px 14px; border: 2px solid #ccc; border-radius: 20px; background: #fff; cursor: pointer; font-size: 14px; min-height: 44px; }
+.pj-tag { display: block; text-align: center; font-size: 11px; color: #c0392b; }
+
+/* Scope checklist in dialogs */
+.modal-content { max-height: 90vh; overflow-y: auto; }
+.modal-form input[type="checkbox"], .dlg-check input { width: auto; min-height: 0; margin-top: 3px; }
+.dlg-checks { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.dlg-check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+.dialog-label a { margin-left: 8px; font-weight: normal; color: #ff6a00; }
+
+#services-step .add-item-btn { margin: 4px 6px 4px 0; }
+#services-step select, #services-step input[type="text"] { margin-bottom: 8px; }
+.deposit-toggle { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; font-size: 14px; }
+.deposit-toggle input { width: auto; min-height: 0; }
+
+/* Services section (matches the app theme) */
+#services-step { background: #f8f9fa; border: 1px solid #e1e5e9; border-radius: 12px; padding: 20px; }
+#services-step h3 { margin: 10px 0 12px; font-size: 16px; }
+#service-lines { margin-bottom: 12px; }
+#service-lines:empty { display: none; }
+.service-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.service-btn { padding: 12px 8px; min-height: 44px; background: #fff; color: #667eea; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.service-btn:hover { background: #667eea; color: #fff; }
+.dialog-label a { color: #667eea; }
+@media (min-width: 700px) { .service-buttons { grid-template-columns: repeat(3, 1fr); } }
+
+/* Job badges, calendar grid */
+.job-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.svc-chip, .stage-chip, .inst-chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #eef0fb; color: #4c5bd4; }
+.stage-chip { background: #fff3cd; color: #8a6d00; }
+.inst-chip { background: #f1f3f5; color: #333; display: inline-flex; align-items: center; gap: 5px; }
+.inst-chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.cal-toolbar { margin-bottom: 10px; }
+.cal-scroll { overflow-x: auto; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(92px, 1fr)); gap: 4px; min-width: 660px; margin-bottom: 20px; }
+.cal-dow { text-align: center; font-weight: bold; font-size: 12px; color: #666; padding: 4px 0; }
+.cal-cell { min-height: 84px; background: #f8f9fa; border: 1px solid #e1e5e9; border-radius: 8px; padding: 4px; }
+.cal-empty { background: transparent; border: none; }
+.cal-clash { border-color: #dc3545; background: #fff5f5; }
+.cal-num { font-size: 12px; font-weight: bold; color: #555; margin-bottom: 3px; }
+.cal-chip { display: block; width: 100%; text-align: left; margin-bottom: 3px; padding: 3px 5px; font-size: 11px; background: #fff; border: 1px solid #e1e5e9; border-left: 4px solid #adb5bd; border-radius: 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-chip small { display: block; color: #666; }
+
+/* Board view */
+.view-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+.view-toggle button { padding: 8px 16px; min-height: 40px; border: 2px solid #667eea; background: #fff; color: #667eea; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.view-toggle button.active { background: #667eea; color: #fff; }
+.board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+.board-col { flex: 0 0 250px; background: #f1f3f5; border-radius: 10px; padding: 8px; }
+.board-col-head { display: flex; justify-content: space-between; font-weight: bold; font-size: 13px; padding: 4px 6px 8px; }
+.board-card { background: #fff; border-radius: 8px; padding: 10px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+.board-title { font-weight: 600; cursor: pointer; margin-bottom: 4px; }
+.board-meta { font-size: 12px; color: #666; margin-bottom: 3px; }
+.board-card select { width: 100%; margin-top: 6px; font-size: 13px; min-height: 36px; }
+.board-empty { color: #aaa; text-align: center; padding: 8px; }
+
+/* Edit mode banner */
+.edit-banner { background: #fff3cd; border: 1px solid #ffe08a; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 14px; }
+.edit-banner button { margin-left: 10px; padding: 4px 12px; border: 1px solid #8a6d00; background: #fff; border-radius: 6px; cursor: pointer; }
+
+/* Dashboard */
+.dash-wide { max-width: 760px; width: 96%; }
+.dash-scroll { overflow-x: auto; }
+.dash-table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; font-size: 13px; }
+.dash-table th, .dash-table td { padding: 6px 8px; border-bottom: 1px solid #e1e5e9; text-align: right; white-space: nowrap; }
+.dash-table th:first-child, .dash-table td:first-child { text-align: left; }
+.dash-note { font-size: 12px; color: #666; margin: -12px 0 16px; }
+
+a.svc-chip { text-decoration: none; }

@@ -50,6 +50,10 @@
                     <button id="nav-quotes-btn" class="nav-btn">📄 Quotes</button>
                     <button id="nav-calendar-btn" class="nav-btn">📅 Calendar</button>
                     <button id="nav-history-btn" class="nav-btn">📋 History</button>
+                    <button class="nav-btn fu-btn" onclick="app.openFollowUps()">📞 Follow-ups</button>
+                    <button class="nav-btn" onclick="app.openSettings()">⚙ Settings</button>
+                    <button class="nav-btn" onclick="app.openDashboard()">📊 Dashboard</button>
+                    <button class="nav-btn" onclick="app.openTeam()">👷 Team</button>
                     <button id="logout-btn" class="logout-btn">Logout</button>
                 </div>
             </div>
@@ -91,10 +95,30 @@
                     </div>
                 </div>
 
+                <div class="step" id="services-step">
+                    <label for="cabinet-colour">Kitchen Colour / Finish (Optional):</label>
+                    <input type="text" id="cabinet-colour" placeholder="e.g. Glossy White">
+                    <h3>Other Services (Optional):</h3>
+                    <div id="service-lines"></div>
+                    <div class="service-buttons">
+                        <button type="button" class="service-btn" data-svc="wardrobe">+ Wardrobe</button>
+                        <button type="button" class="service-btn" data-svc="appliance">+ Appliance</button>
+                        <button type="button" class="service-btn" data-svc="tinting">+ Window Tinting</button>
+                        <button type="button" class="service-btn" data-svc="frosting">+ Window Frosting</button>
+                        <button type="button" class="service-btn" data-svc="wallpaper">+ Wallpaper</button>
+                    </div>
+                </div>
+
                 <div class="step" id="transport-step" style="display: none;">
                     <label for="transport-input">Transportation Cost (Optional):</label>
                     <input type="number" id="transport-input" min="0" step="0.01"
                         placeholder="Enter transportation cost (R0 if none)">
+                    <label for="food-input">Food Cost (Optional):</label>
+                    <input type="number" id="food-input" min="0" step="0.01" placeholder="Automatic">
+                    <p class="photo-hint">Leave blank for automatic (R300 a day for kitchens and wardrobes).</p>
+                    <label for="days-input">Estimated Days (Optional):</label>
+                    <input type="number" id="days-input" min="1" step="1" placeholder="Automatic">
+                    <p class="photo-hint">Leave blank for the automatic estimate. Typing a number overrides it.</p>
                 </div>
 
                 <!-- Custom Line Items -->
@@ -129,9 +153,11 @@
                         <p><strong>Food Cost:</strong> R<span id="result-food-cost"></span></p>
                         <p><strong>Transportation Cost:</strong> R<span id="result-transport-cost"></span></p>
                         <p id="custom-items-result" style="display: none;"><strong>Additional Charges:</strong> R<span id="result-custom-items"></span></p>
+                        <p id="lines-result" style="display: none;"><strong>Other Services:</strong> R<span id="result-lines"></span></p>
                         <p class="total"><strong>Total Quote:</strong> R<span id="result-total"></span></p>
                     </div>
                     <div class="quote-actions">
+                        <label class="deposit-toggle"><input type="checkbox" id="deposit-required" checked> Deposit required</label>
                         <input type="text" id="quote-name-input" placeholder="Enter quote name (optional)"
                             class="quote-name-input">
                         <div class="quote-actions-row">
@@ -159,6 +185,10 @@
                     <button id="nav-quotes-btn-2" class="nav-btn">📄 Quotes</button>
                     <button id="nav-calendar-btn-2" class="nav-btn">📅 Calendar</button>
                     <button id="nav-history-btn-2" class="nav-btn">📋 History</button>
+                    <button class="nav-btn fu-btn" onclick="app.openFollowUps()">📞 Follow-ups</button>
+                    <button class="nav-btn" onclick="app.openSettings()">⚙ Settings</button>
+                    <button class="nav-btn" onclick="app.openDashboard()">📊 Dashboard</button>
+                    <button class="nav-btn" onclick="app.openTeam()">👷 Team</button>
                     <button id="logout-btn-customers" class="logout-btn">Logout</button>
                 </div>
             </div>
@@ -186,6 +216,10 @@
                     <button id="nav-customers-btn-3" class="nav-btn">👥 Customers</button>
                     <button id="nav-quotes-btn-3" class="nav-btn">📄 Quotes</button>
                     <button id="nav-history-btn-3" class="nav-btn">📋 History</button>
+                    <button class="nav-btn fu-btn" onclick="app.openFollowUps()">📞 Follow-ups</button>
+                    <button class="nav-btn" onclick="app.openSettings()">⚙ Settings</button>
+                    <button class="nav-btn" onclick="app.openDashboard()">📊 Dashboard</button>
+                    <button class="nav-btn" onclick="app.openTeam()">👷 Team</button>
                     <button id="logout-btn-calendar" class="logout-btn">Logout</button>
                 </div>
             </div>
@@ -216,6 +250,10 @@
                     <button id="nav-customers-btn-4" class="nav-btn">👥 Customers</button>
                     <button id="nav-quotes-btn-4" class="nav-btn">📄 Quotes</button>
                     <button id="nav-calendar-btn-4" class="nav-btn">📅 Calendar</button>
+                    <button class="nav-btn fu-btn" onclick="app.openFollowUps()">📞 Follow-ups</button>
+                    <button class="nav-btn" onclick="app.openSettings()">⚙ Settings</button>
+                    <button class="nav-btn" onclick="app.openDashboard()">📊 Dashboard</button>
+                    <button class="nav-btn" onclick="app.openTeam()">👷 Team</button>
                     <button id="logout-btn-history" class="logout-btn">Logout</button>
                 </div>
             </div>
@@ -267,6 +305,10 @@
                     <button id="nav-customers-btn-5" class="nav-btn">👥 Customers</button>
                     <button id="nav-calendar-btn-5" class="nav-btn">📅 Calendar</button>
                     <button id="nav-history-btn-5" class="nav-btn">📋 History</button>
+                    <button class="nav-btn fu-btn" onclick="app.openFollowUps()">📞 Follow-ups</button>
+                    <button class="nav-btn" onclick="app.openSettings()">⚙ Settings</button>
+                    <button class="nav-btn" onclick="app.openDashboard()">📊 Dashboard</button>
+                    <button class="nav-btn" onclick="app.openTeam()">👷 Team</button>
                     <button id="logout-btn-saved" class="logout-btn">Logout</button>
                 </div>
             </div>
@@ -301,6 +343,8 @@
                         <button id="export-csv-btn" class="export-btn">Export CSV</button>
                     </div>
                 </div>
+                <div class="view-toggle"><button type="button" id="view-list-btn" class="active">List</button><button type="button" id="view-board-btn">Board</button></div>
+                <div id="board-view" class="hidden"></div>
                 <div id="saved-quotes-list" class="saved-quotes-list">
                     <!-- Saved quotes will be loaded here -->
                 </div>

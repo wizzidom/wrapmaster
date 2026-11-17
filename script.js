@@ -27,15 +27,26 @@ const fmtR = n => 'R' + (Number(n) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d)
 const BUSINESS = {
     name: 'Kitchen Wrap Masters', area: 'Joburg South', phone: '071 958 5783', email: 'wiseman@kitchenwrapmasters.co.za',
     terms: 'https://kitchenwrapmasters.co.za/pages/termsandconditions.html',
-    bank: [['Bank', 'Bidvest Bank Alliance'], ['Account holder', 'Kitchen Wrap Masters'], ['Account number', '78605188211'], ['Account type', 'Current'], ['Branch code', '683000']],
-    scope: [
+    bank: [], // loaded from business_settings after login (never stored in this file)
+    scopes: {
+        kitchen: [
         'Wrapping of cupboard door fronts', 'Wrapping over the edges of each door', 'Wrapping of all visible edging',
         'Cleaning and preparation of all surfaces before wrapping', 'Cleaning of handles',
         'Adjustment of damaged hinges where necessary', 'Adjustment of damaged drawer runners where necessary',
         'Silicone application to relevant areas', 'Sanding of the doors where necessary',
         'Reinstallation and adjustment of doors, drawers and hardware after wrapping',
         'Final cleaning and finishing to ensure a neat, professional result'],
-    exclusions: 'We wrap the front of the doors and over the edges only. The inside of the doors and internal cabinet sections are not included. We do not wrap countertops.'
+        wardrobe: ['Wrapping of wardrobe door fronts', 'Wrapping over the edges of each door', 'Wrapping of all visible edging', 'Cleaning and preparation of all surfaces before wrapping', 'Cleaning of handles', 'Adjustment of damaged hinges where necessary', 'Sanding of the doors where necessary', 'Reinstallation and adjustment of doors and hardware after wrapping', 'Final cleaning and finishing to ensure a neat, professional result'],
+        appliance: ['Cleaning and preparation of the appliance surfaces before wrapping', 'Wrapping of the visible exterior panels', 'Wrapping over the edges where necessary', 'Final cleaning and finishing to ensure a neat, professional result'],
+        tinting: ['Cleaning and preparation of the glass before application', 'Application of window tint film', 'Trimming of the film to fit each pane', 'Final cleaning and finishing to ensure a neat, professional result'],
+        frosting: ['Cleaning and preparation of the glass before application', 'Application of frosting film', 'Trimming of the film to fit each pane', 'Final cleaning and finishing to ensure a neat, professional result'],
+        wallpaper: ['Cleaning and preparation of the wall surface', 'Hanging of wallpaper', 'Matching of patterns where applicable', 'Trimming and finishing at edges, corners and fittings', 'Removal of offcuts and final cleaning']
+    },
+    // "Please note" text is only printed for the services listed here
+    notes: {
+        kitchen: 'We wrap the front of the doors and over the edges only. The inside of the doors and internal cabinet sections are not included. We do not wrap countertops.',
+        wardrobe: 'We wrap the front of the doors and over the edges only. The inside of the wardrobe is not included.'
+    }
 };
 const ORANGE = [255, 106, 0], DARK = [26, 31, 31], GREY = [105, 110, 110], SOFT = [246, 246, 244];
 
@@ -50,6 +61,26 @@ const PRICING = {
         { id: 'stixo', name: 'Stixo (Gloss White/Light Grey)', rate: 80 }
     ]
 };
+
+PRICING.depositPct = 50;
+BUSINESS.validityDays = 30;
+BUSINESS.followUpDays = 3;
+PRICING.appliances = [
+    { id: 'side_by_side', name: '2 door side by side fridge', price: 3800 },
+    { id: 'top_bottom', name: 'Double door top/bottom fridge', price: 2800 },
+    { id: 'chest', name: 'Chest freezer', price: 1800 },
+    { id: 'bar', name: 'Bar fridge', price: 1300 },
+    { id: 'washer', name: 'Washing machine', price: 1800 },
+    { id: 'dishwasher', name: 'Dishwasher', price: 1800 },
+    { id: 'dryer', name: 'Tumble dryer', price: 1800 }
+];
+const SERVICES = {
+    kitchen: { name: 'Kitchen cabinet wrapping' }, wardrobe: { name: 'Wardrobe wrapping' }, appliance: { name: 'Appliance wrapping' },
+    tinting: { name: 'Window tinting', rate: 750 }, frosting: { name: 'Window frosting', rate: 650 }, wallpaper: { name: 'Wallpaper', rate: 750 }
+};
+
+const STAGE_LABELS = { accepted: 'Accepted', deposit_requested: 'Deposit requested', deposit_received: 'Deposit received', scheduled: 'Scheduled', in_progress: 'In progress', snagging: 'Snagging', awaiting_payment: 'Awaiting payment', complete: 'Complete' };
+const SERVICE_SHORT = { kitchen: 'Kitchen', wardrobe: 'Wardrobe', appliance: 'Appliance', tinting: 'Tinting', frosting: 'Frosting', wallpaper: 'Wallpaper' };
 
 // User authentication and quote calculator functionality
 class VinylQuoteApp {
@@ -70,7 +101,10 @@ class VinylQuoteApp {
     }
 
     init() {
+        this.serviceLines = [];
+        this.depositTouched = false;
         this.renderMaterials();
+        this.bindServiceEvents();
         this.bindEvents();
         this.checkAuthStatus();
     }
@@ -322,6 +356,8 @@ class VinylQuoteApp {
         document.getElementById('saved-quotes-section').classList.add('hidden');
         await this.loadCustomers();
         this.populateCustomerDropdown();
+        if (!this.settingsLoaded) { this.settingsLoaded = true; this.loadBusinessSettings(); }
+        if (!this.draftAsked) { this.draftAsked = true; this.restoreDraft(); }
     }
 
     async showCustomersSection() {
@@ -426,7 +462,7 @@ class VinylQuoteApp {
         const photoUploadStep = document.getElementById('photo-upload-step');
         const calculateBtn = document.getElementById('calculate-btn');
 
-        if (selectedMaterial) {
+        if (selectedMaterial || this.serviceLines.length) {
             transportStep.style.display = 'block';
             customItemsStep.style.display = 'block';
             photoUploadStep.style.display = 'block';
@@ -517,9 +553,10 @@ class VinylQuoteApp {
         this.updateCustomItemsTotal();
     }
 
-    updateCustomItemsTotal() { this.recalcIfShown(); }
+    updateCustomItemsTotal() { this.recalcIfShown(); this.saveDraft(); }
 
     hideCalculateButton() {
+        if (this.serviceLines.length) { this.recalcIfShown(); return; }
         document.getElementById('calculate-btn').style.display = 'none';
         document.getElementById('quote-result').style.display = 'none';
         document.getElementById('transport-step').style.display = 'none';
@@ -527,63 +564,101 @@ class VinylQuoteApp {
 
     calculateQuote(silent = false) {
         const bad = m => { if (silent) { this.currentQuote = null; document.getElementById('quote-result').style.display = 'none'; } else { this.showError(m); } };
-        const selectedMaterial = document.querySelector('input[name="material"]:checked');
-        const transportCost = Math.max(0, parseFloat(document.getElementById('transport-input').value) || 0);
-
-        if (!selectedMaterial) {
-            bad('Please select a material type');
-            return;
-        }
-
-        let doors, squareMetres;
-
+        const sel = document.querySelector('input[name="material"]:checked'), lines = this.serviceLines;
+        let doors = 0, squareMetres = 0;
         if (this.calculatorMode === 'doors') {
-            doors = parseInt(document.getElementById('doors-input').value);
-            if (!doors || doors <= 0) {
-                bad('Please enter a valid number of doors');
-                return;
-            }
-            // Calculate square metres (2 doors = 1 square metre)
+            doors = parseInt(document.getElementById('doors-input').value) || 0;
             squareMetres = doors / PRICING.doorsPerSqm;
         } else {
-            // Square metres mode
-            squareMetres = parseFloat(document.getElementById('sqm-input').value);
-            if (!squareMetres || squareMetres <= 0) {
-                bad('Please enter a valid square metres value');
-                return;
-            }
-            // Calculate doors from square metres and round up
+            squareMetres = parseFloat(document.getElementById('sqm-input').value) || 0;
             doors = Math.ceil(squareMetres * PRICING.doorsPerSqm);
         }
+        const hasCab = doors > 0;
+        if (!hasCab && !lines.length) { bad(this.calculatorMode === 'doors' ? 'Please enter a valid number of doors' : 'Please enter a valid square metres value'); return; }
+        if (hasCab && !sel) { bad('Please select a material type'); return; }
+        const ward = lines.filter(l => l.service_type === 'wardrobe'), wardSides = ward.reduce((s, l) => s + l.qty, 0), wardSqm = ward.reduce((s, l) => s + l.details.sqm, 0);
+        const cabDays = Math.ceil((doors + wardSides) / PRICING.sidesPerDay);
+        const autoDays = Math.max(1, cabDays + (lines.some(l => l.service_type !== 'wardrobe') ? 1 : 0)), daysRaw = parseInt(document.getElementById('days-input').value), projectDays = daysRaw > 0 ? daysRaw : autoDays;
+        const materialRate = hasCab ? parseFloat(sel.dataset.rate) : 0;
+        const materialName = hasCab ? this.getMaterialName(sel.value) : 'Other services';
+        const materialCost = squareMetres * materialRate, installationFee = doors * PRICING.installPerSide;
+        const foodRaw = document.getElementById('food-input').value;
+        const foodCost = foodRaw !== '' ? Math.max(0, parseFloat(foodRaw) || 0) : cabDays * PRICING.foodPerDay;
+        const transportCost = Math.max(0, parseFloat(document.getElementById('transport-input').value) || 0);
+        const customItemsTotal = this.customLineItems.reduce((s, x) => s + x.amount, 0);
+        const linesTotal = lines.reduce((s, l) => s + l.line_total, 0);
+        const totalCost = materialCost + installationFee + foodCost + transportCost + customItemsTotal + linesTotal;
+        this.displayQuoteResult({ doors, squareMetres, projectDays, materialName, materialRate, materialCost, installationFee, foodCost, transportCost, customItemsTotal, linesTotal, hasCab, totalCost, totalSides: doors + wardSides, totalSqm: squareMetres + wardSqm });
+    }
 
-        // Calculate project duration (30 sides = 1 day)
-        const projectDays = Math.ceil(doors / PRICING.sidesPerDay);
+    bindServiceEvents() {
+        document.querySelectorAll('[data-svc]').forEach(b => { b.onclick = () => this.addServiceLine(b.dataset.svc); });
+        document.getElementById('food-input').addEventListener('input', () => this.recalcIfShown());
+        document.getElementById('deposit-required').addEventListener('change', () => { this.depositTouched = true; });
+        document.getElementById('days-input').addEventListener('input', () => this.recalcIfShown());
+        document.getElementById('view-list-btn').onclick = () => this.setView('list');
+        document.getElementById('view-board-btn').onclick = () => this.setView('board');
+        const qs = document.getElementById('quote-section');
+        let timer;
+        ['input', 'change'].forEach(ev => qs.addEventListener(ev, () => { clearTimeout(timer); timer = setTimeout(() => this.saveDraft(), 400); }));
+    }
 
-        // Get material rate
-        const materialRate = parseFloat(selectedMaterial.dataset.rate);
-        const materialName = this.getMaterialName(selectedMaterial.value);
+    async addServiceLine(type) {
+        const S = SERVICES[type];
+        let line;
+        if (type === 'wardrobe') {
+            const r = await this.ask({ title: 'Add wardrobe wrapping', fields: [
+                { name: 'mode', type: 'select', label: 'Measured in', options: [['doors', 'Doors / sides'], ['sqm', 'Square metres']] },
+                { name: 'amount', label: 'Amount', type: 'number', step: '0.01', min: 0, required: true },
+                { name: 'material', type: 'select', label: 'Material', options: PRICING.materials.map(m => [m.id, `${m.name} - R${m.rate}/m²`]) },
+                { name: 'colour', label: 'Colour / finish', required: true }], okText: 'Add' });
+            if (!r) return;
+            const mat = PRICING.materials.find(m => m.id === r.material), n = parseFloat(r.amount);
+            const doors = r.mode === 'doors' ? Math.round(n) : Math.ceil(n * PRICING.doorsPerSqm);
+            if (!(doors > 0)) { this.showError('Enter a valid amount'); return; }
+            const sqm = r.mode === 'doors' ? doors / PRICING.doorsPerSqm : n;
+            line = { service_type: type, description: S.name, colour: r.colour, qty: doors, unit: 'sides', unit_price: null, line_total: sqm * mat.rate + doors * PRICING.installPerSide, details: { sqm, material: mat.name, rate: mat.rate } };
+        } else if (type === 'appliance') {
+            const r = await this.ask({ title: 'Add appliance', fields: [
+                { name: 'item', type: 'select', label: 'Appliance', options: PRICING.appliances.map(a => [a.id, `${a.name} - R${a.price}`]) },
+                { name: 'qty', label: 'Quantity', type: 'number', value: '1', min: 1, step: '1', required: true },
+                { name: 'colour', label: 'Colour / finish', required: true }], okText: 'Add' });
+            if (!r) return;
+            const a = PRICING.appliances.find(x => x.id === r.item), qty = Math.max(1, parseInt(r.qty) || 1);
+            line = { service_type: type, description: a.name, colour: r.colour, qty, unit: 'each', unit_price: a.price, line_total: a.price * qty, details: { item: a.id } };
+        } else {
+            const r = await this.ask({ title: 'Add ' + S.name.toLowerCase(), message: `R${S.rate} per m². Enter the total area, or list each window/wall as width x height in metres, one per line (for example 1.2 x 1.5). Sizes override the total area.`, fields: [
+                { name: 'area', label: 'Total area (m²)', type: 'number', step: '0.01', min: 0 },
+                { name: 'sizes', label: 'Or sizes (one per line)', multiline: true },
+                { name: 'colour', label: 'Colour / film / pattern (optional)' }], okText: 'Add' });
+            if (!r) return;
+            let area = parseFloat(r.area) || 0;
+            const sizes = [];
+            for (const row of r.sizes.split('\n').map(s => s.trim()).filter(Boolean)) {
+                const m = row.replace(/,/g, '.').match(/^(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)$/i);
+                if (!m) { this.showError(`Could not read "${row}". Use width x height, for example 1.2 x 1.5`); return; }
+                sizes.push([+m[1], +m[2]]);
+            }
+            if (sizes.length) area = sizes.reduce((s, [w, hh]) => s + w * hh, 0);
+            if (!(area > 0)) { this.showError('Enter an area or at least one size'); return; }
+            area = Math.round(area * 100) / 100;
+            line = { service_type: type, description: S.name, colour: r.colour || null, qty: area, unit: 'm²', unit_price: S.rate, line_total: Math.round(area * S.rate * 100) / 100, details: { sizes } };
+        }
+        this.serviceLines.push(line);
+        this.renderServiceLines();
+        this.onLinesChanged();
+    }
 
-        // Calculate costs
-        const materialCost = squareMetres * materialRate;
-        const installationFee = doors * PRICING.installPerSide;
-        const foodCost = projectDays * PRICING.foodPerDay;
-        const customItemsTotal = this.customLineItems.reduce((sum, item) => sum + item.amount, 0);
-        const totalCost = materialCost + installationFee + foodCost + transportCost + customItemsTotal;
+    removeServiceLine(i) { this.serviceLines.splice(i, 1); this.renderServiceLines(); this.onLinesChanged(); }
 
-        // Display results
-        this.displayQuoteResult({
-            doors,
-            squareMetres,
-            projectDays,
-            materialName,
-            materialRate,
-            materialCost,
-            installationFee,
-            foodCost,
-            transportCost,
-            customItemsTotal,
-            totalCost
-        });
+    onLinesChanged() {
+        this.handleMaterialSelection();
+        this.saveDraft();
+        if (!this.serviceLines.length && !document.querySelector('input[name="material"]:checked')) { this.currentQuote = null; this.hideCalculateButton(); }
+    }
+
+    renderServiceLines() {
+        document.getElementById('service-lines').innerHTML = this.serviceLines.map((l, i) => `<div class="custom-line-item"><span class="item-description">${esc(l.description)} - ${l.unit === 'each' ? 'x ' + l.qty : l.qty + ' ' + l.unit}${l.colour ? ' (' + esc(l.colour) + ')' : ''}</span><span class="item-amount">${fmtR(l.line_total)}</span><button type="button" class="remove-item-btn" aria-label="Remove" onclick="app.removeServiceLine(${i})">×</button></div>`).join('');
     }
 
     getMaterialName(value) {
@@ -592,10 +667,10 @@ class VinylQuoteApp {
     }
 
     displayQuoteResult(quote) {
-        document.getElementById('result-doors').textContent = quote.doors;
-        document.getElementById('result-sqm').textContent = quote.squareMetres.toFixed(1);
+        document.getElementById('result-doors').textContent = quote.totalSides;
+        document.getElementById('result-sqm').textContent = quote.totalSqm.toFixed(1);
         document.getElementById('result-days').textContent = quote.projectDays;
-        document.getElementById('result-material').textContent = `${quote.materialName} (R${quote.materialRate}/m²)`;
+        document.getElementById('result-material').textContent = quote.hasCab ? `${quote.materialName} (R${quote.materialRate}/m²)` : '-';
         document.getElementById('result-material-cost').textContent = quote.materialCost.toFixed(2);
         document.getElementById('result-installation').textContent = quote.installationFee.toFixed(2);
         document.getElementById('result-food-cost').textContent = quote.foodCost.toFixed(2);
@@ -608,6 +683,9 @@ class VinylQuoteApp {
             document.getElementById('custom-items-result').style.display = 'none';
         }
         
+        document.getElementById('lines-result').style.display = quote.linesTotal ? 'block' : 'none';
+        document.getElementById('result-lines').textContent = (quote.linesTotal || 0).toFixed(2);
+        if (!this.depositTouched) document.getElementById('deposit-required').checked = quote.hasCab || this.serviceLines.some(l => l.service_type !== 'appliance');
         document.getElementById('result-total').textContent = quote.totalCost.toFixed(2);
 
         document.getElementById('quote-result').style.display = 'block';
@@ -617,6 +695,7 @@ class VinylQuoteApp {
     }
 
     async saveQuote() {
+        if (this.editingId) { return this.updateQuote(); }
         if (!this.currentUser || !this.currentQuote) {
             this.showError('No quote to save');
             return;
@@ -647,8 +726,8 @@ class VinylQuoteApp {
                 .insert([{
                     user_id: this.currentUser.id,
                     customer_id: customerId,
-                    doors: this.currentQuote.doors,
-                    square_metres: this.currentQuote.squareMetres,
+                    doors: this.currentQuote.totalSides,
+                    square_metres: this.currentQuote.totalSqm,
                     project_days: this.currentQuote.projectDays,
                     material_name: this.currentQuote.materialName,
                     material_rate: this.currentQuote.materialRate,
@@ -660,7 +739,8 @@ class VinylQuoteApp {
                     total_cost: this.currentQuote.totalCost,
                     quote_name: quoteName,
                     status: status,
-                    scheduled_date: scheduledDate
+                    scheduled_date: scheduledDate,
+                    deposit_required: document.getElementById('deposit-required').checked
                 }])
                 .select();
 
@@ -674,6 +754,7 @@ class VinylQuoteApp {
 
             const quoteId = quoteData[0].id;
             const warnings = [];
+            const failQuote = async what => { await supabase.from('saved_quotes').delete().eq('id', quoteId); throw new Error('Could not save ' + what + ', so the quote was not saved. Please try again.'); };
 
             // Save custom line items if any
             if (this.customLineItems.length > 0) {
@@ -688,8 +769,17 @@ class VinylQuoteApp {
                     .insert(lineItemsToInsert);
 
                 if (itemsError) {
-                    warnings.push('additional charges');
+                    await failQuote('the additional charges');
                 }
+            }
+
+            // Save service lines (cabinet part + other services)
+            const q = this.currentQuote, kind = 'kitchen', rows = [];
+            if (q.hasCab) rows.push({ service_type: kind, description: SERVICES[kind].name, colour: document.getElementById('cabinet-colour').value.trim() || null, qty: q.doors, unit: 'sides', unit_price: null, line_total: q.materialCost + q.installationFee, details: { sqm: q.squareMetres, material: q.materialName, rate: q.materialRate } });
+            this.serviceLines.forEach(l => rows.push(l));
+            if (rows.length) {
+                const { error: lerr } = await supabase.from('quote_lines').insert(rows.map((r, i) => ({ ...r, quote_id: quoteId, position: i })));
+                if (lerr) await failQuote('the service lines');
             }
 
             // Upload photos if any
@@ -1063,6 +1153,8 @@ class VinylQuoteApp {
         });
 
         this.renderScheduledQuotesList(scheduledQuotes, selectedMonth);
+        const [cy, cm] = monthSelect.value.split('-').map(Number);
+        this.renderCalendarGrid(cy, cm, statusFilter);
     }
 
     renderScheduledQuotesList(quotes, month) {
@@ -1145,7 +1237,7 @@ class VinylQuoteApp {
                 quote.material_name.toLowerCase().includes(searchTerm);
             
             // Date filter
-            const matchesDate = this.matchesHistoryDateFilter(quote.updated_at || quote.created_at, dateFilter);
+            const matchesDate = this.matchesHistoryDateFilter(quote.completed_at || quote.updated_at || quote.created_at, dateFilter);
             
             return matchesSearch && matchesDate;
         });
@@ -1206,8 +1298,8 @@ class VinylQuoteApp {
         container.innerHTML = this.filteredHistory.map(quote => `
             <div class="history-item">
                 <div class="history-header">
-                    <div class="history-title">${esc(quote.quote_name)}</div>
-                    <div class="history-date">Completed: ${new Date(quote.updated_at || quote.created_at).toLocaleDateString('en-ZA')}</div>
+                    <div class="history-title">${esc(quote.quote_name)}${this.jobBadges(quote)}${this.profitLine(quote)}</div>
+                    <div class="history-date">Completed: ${new Date(quote.completed_at || quote.updated_at || quote.created_at).toLocaleDateString('en-ZA')}</div>
                 </div>
                 
                 <div class="history-details">
@@ -1239,6 +1331,7 @@ class VinylQuoteApp {
                 
                 <div class="history-actions">
                     <button class="view-history-btn" onclick="app.viewHistoryDetails('${quote.id}')">View Full Details</button>
+                    <button class="view-history-btn" onclick="app.editCosts('${quote.id}')">💰 Costs</button>
                     <button class="export-history-btn" onclick="app.exportSingleQuote('${quote.id}')">Export PDF</button>
                     ${quote.invoice_number ? `<button class="invoice-history-btn" onclick="app.generateInvoice('${quote.id}')">View Invoice</button>` : ''}
                     <button class="delete-history-btn" onclick="app.deleteCompletedProject('${quote.id}')">🗑️ Delete</button>
@@ -1306,7 +1399,8 @@ class VinylQuoteApp {
         // Generate invoice number if not exists
         let invoiceNumber = quote.invoice_number;
         if (!invoiceNumber) {
-            invoiceNumber = `INV-${Date.now()}`;
+            const { data: invNo, error: noErr } = await supabase.rpc('next_doc_no', { p_kind: 'invoice' });
+            invoiceNumber = (noErr || !invNo) ? `INV-${Date.now()}` : invNo;
             
             const { error } = await supabase
                 .from('saved_quotes')
@@ -1341,6 +1435,7 @@ class VinylQuoteApp {
                         <p><strong>Deposit Paid:</strong> ${fmtR((quote.deposit_paid || 0))}</p>
                         <p><strong>Final Payment Paid:</strong> ${fmtR((quote.final_payment_paid || 0))}</p>
                         <p class="remaining-amount"><strong>Amount Due:</strong> R${remainingAmount}</p>
+                        <div id="payment-ledger"></div>
                         
                         <div class="payment-actions">
                             <h4>Record Payment:</h4>
@@ -1349,6 +1444,9 @@ class VinylQuoteApp {
                                 <option value="deposit">Deposit Payment</option>
                                 <option value="final">Final Payment</option>
                             </select>
+                            <select id="payment-method"><option value="eft">EFT</option><option value="cash">Cash</option><option value="card">Card</option><option value="other">Other</option></select>
+                            <input type="date" id="payment-date" value="${new Date().toLocaleDateString('en-CA')}">
+                            <input type="text" id="payment-ref" placeholder="Reference (optional)">
                             <button onclick="app.recordPayment('${quote.id}')" class="modal-save-btn">Record Payment</button>
                         </div>
                     </div>
@@ -1361,6 +1459,7 @@ class VinylQuoteApp {
         `;
 
         document.body.insertAdjacentHTML('beforeend', modalHTML);
+        this.loadLedger(quote.id);
     }
 
     closeInvoiceModal() {
@@ -1398,9 +1497,8 @@ class VinylQuoteApp {
 
         try {
             const { error } = await supabase
-                .from('saved_quotes')
-                .update(updateData)
-                .eq('id', quoteId);
+                .from('payments')
+                .insert({ quote_id: quoteId, kind: paymentType === 'deposit' ? 'deposit' : 'final', amount, method: document.getElementById('payment-method').value, paid_on: document.getElementById('payment-date').value || new Date().toLocaleDateString('en-CA'), reference: document.getElementById('payment-ref').value.trim() || null });
 
             if (error) {
                 this.showError('Failed to record payment: ' + error.message);
@@ -1408,6 +1506,12 @@ class VinylQuoteApp {
             }
 
             this.showSuccess('Payment recorded successfully!');
+            if (paymentType === 'deposit' && quote.status === 'accepted' && ['quote', 'accepted', 'deposit_requested', null, undefined].includes(quote.job_stage)) {
+                await supabase.from('saved_quotes').update({ job_stage: 'deposit_received' }).eq('id', quoteId);
+            } else if (totalPaid >= parseFloat(quote.total_cost) - 0.005 && quote.job_stage === 'awaiting_payment') {
+                await supabase.from('saved_quotes').update({ status: 'completed', job_stage: 'complete', completed_at: new Date().toISOString() }).eq('id', quoteId);
+                this.showSuccess('Paid in full: job moved to Complete');
+            }
             this.closeInvoiceModal();
             await this.loadSavedQuotes();
         } catch (error) {
@@ -1451,6 +1555,8 @@ class VinylQuoteApp {
             }
 
             this.savedQuotes = data || [];
+            await this.loadJobMeta();
+            this.updateFollowUpCount();
             // Exclude completed quotes from saved quotes view
             this.filteredQuotes = this.savedQuotes.filter(q => q.status !== 'completed');
             this.renderSavedQuotes();
@@ -1460,6 +1566,7 @@ class VinylQuoteApp {
     }
 
     renderSavedQuotes() {
+        if (this.savedView === 'board') this.renderBoard();
         const container = document.getElementById('saved-quotes-list');
         const noQuotesMessage = document.getElementById('no-quotes-message');
 
@@ -1504,7 +1611,8 @@ class VinylQuoteApp {
                         <div class="quote-title">${esc(quote.quote_name)}</div>
                         <span class="status-badge status-${quote.status || 'pending'}">${this.getStatusLabel(quote.status || 'pending')}</span>
                     </div>
-                    <div class="quote-date">${this.customerLabel(quote)}${new Date(quote.created_at).toLocaleDateString('en-ZA')}</div>
+                    <div class="quote-date">${quote.quote_no ? esc(quote.quote_no) + ' · ' : ''}${this.customerLabel(quote)}${new Date(quote.created_at).toLocaleDateString('en-ZA')}</div>
+                    ${this.jobBadges(quote)}
                 </div>
                 
                 <div class="quote-summary">
@@ -1548,6 +1656,8 @@ class VinylQuoteApp {
                         <option value="rejected" ${quote.status === 'rejected' ? 'disabled' : ''}>Rejected</option>
                         <option value="completed" ${quote.status === 'completed' ? 'disabled' : ''}>Completed</option>
                     </select>
+                    <button class="view-details-btn" onclick="app.editFullQuote('${quote.id}')">✏️ Edit</button><button class="view-details-btn" onclick="app.duplicateQuote('${quote.id}')">📋 Duplicate</button>
+                    ${quote.status === 'accepted' ? `<button class="view-details-btn" onclick="app.openPlanJob('${quote.id}')">📅 ${quote.scheduled_date ? 'Plan Job' : 'Schedule Job'}</button>` : ''}
                     <button class="invoice-btn" onclick="app.generateInvoice('${quote.id}')">💰 Invoice</button>
                     <button class="export-individual-btn" onclick="app.exportSingleQuote('${quote.id}')">Export PDF</button>
                     <button class="edit-quote-btn" onclick="app.editQuote('${quote.id}')">Edit Name</button>
@@ -1595,6 +1705,12 @@ class VinylQuoteApp {
             customer = customerData;
         }
 
+        const sp = photos || [];
+        if (sp.length) {
+            const paths = sp.map(p => decodeURIComponent((String(p.photo_url).split('/quote-photos/')[1] || '').split('?')[0]));
+            const { data: signed } = await supabase.storage.from('quote-photos').createSignedUrls(paths, 3600);
+            sp.forEach((p, i) => { if (signed && signed[i] && signed[i].signedUrl) p.photo_url = signed[i].signedUrl; });
+        }
         this.showQuoteDetailsModal(quote, photos || [], customItems || [], customer);
     }
 
@@ -1729,6 +1845,7 @@ class VinylQuoteApp {
                     <div class="modal-actions">
                         <button onclick="app.exportSingleQuote('${quote.id}')" class="modal-save-btn">Export PDF</button>
                         ${quote.status !== 'completed' ? `<button onclick="app.generateInvoice('${quote.id}')" class="modal-save-btn">Generate Invoice</button>` : ''}
+                        ${quote.status === 'accepted' ? `<button onclick="app.openPlanJob('${quote.id}')" class="modal-save-btn">Plan Job</button>` : ''}
                         <button onclick="app.closeQuoteDetailsModal()" class="modal-cancel-btn">Close</button>
                     </div>
                 </div>
@@ -1770,6 +1887,14 @@ class VinylQuoteApp {
     }
 
     async changeQuoteStatus(quoteId, newStatus) {
+        if (newStatus === 'completed') {
+            const cq = this.savedQuotes.find(x => x.id === quoteId);
+            if (cq && this.balanceOf(cq) > 0.005) {
+                this.showError(`Complete means finished and paid. ${fmtR(this.balanceOf(cq))} is still outstanding. Record the final payment on the invoice first.`);
+                await this.loadSavedQuotes();
+                return;
+            }
+        }
         if (!newStatus) return;
 
         const quote = this.savedQuotes.find(q => q.id === quoteId);
@@ -1807,6 +1932,16 @@ class VinylQuoteApp {
             }
             
             await this.loadSavedQuotes();
+            if (newStatus === 'accepted') {
+                // Accepted: move the job into the pipeline and prompt to schedule it
+                if (!quote.job_stage || quote.job_stage === 'quote') {
+                    await supabase.from('saved_quotes').update({ job_stage: 'accepted' }).eq('id', quoteId);
+                    await this.loadSavedQuotes();
+                }
+                this.openPlanJob(quoteId);
+            } else if (newStatus === 'completed') {
+                await supabase.from('saved_quotes').update({ job_stage: 'complete', completed_at: new Date().toISOString() }).eq('id', quoteId);
+            }
         } catch (error) {
             this.showError('Failed to update status. Please try again.');
         }
@@ -1836,9 +1971,14 @@ class VinylQuoteApp {
     recalcIfShown() { if (this.currentQuote) this.calculateQuote(true); }
 
     renderMaterials() {
-        document.querySelector('.material-options').innerHTML = PRICING.materials.map(m =>
-            `<label class="material-option"><input type="radio" name="material" value="${m.id}" data-rate="${m.rate}"><span>${esc(m.name)} - R${m.rate} per m²</span></label>`).join('');
-        document.getElementById('material-filter').insertAdjacentHTML('beforeend', PRICING.materials.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join(''));
+        const box = document.querySelector('.material-options'), cur = (document.querySelector('input[name="material"]:checked') || {}).value;
+        box.innerHTML = PRICING.materials.map(m => `<label class="material-option"><input type="radio" name="material" value="${esc(m.id)}" data-rate="${m.rate}"><span>${esc(m.name)} - R${m.rate} per m²</span></label>`).join('');
+        box.onchange = () => this.handleMaterialSelection();
+        const r = cur && [...box.querySelectorAll('input')].find(x => x.value === cur);
+        if (r) r.checked = true;
+        const f = document.getElementById('material-filter');
+        while (f.options.length > 1) f.remove(1);
+        f.insertAdjacentHTML('beforeend', PRICING.materials.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join(''));
     }
 
     customerLabel(q, deco = true) {
@@ -1852,7 +1992,9 @@ class VinylQuoteApp {
         if (!q.length) { this.showError('No quotes to export'); return; }
         const cols = ['quote_name','status','created_at','scheduled_date','doors','square_metres','material_name','material_cost','installation_fee','food_cost','transport_cost','custom_items_total','total_cost','payment_status','deposit_paid','final_payment_paid','invoice_number'];
         const cell = v => { v = v == null ? '' : String(v); if (/^[=+@]|^-(?!\d)/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
-        const rows = [['customer', ...cols].map(cell).join(',')].concat(q.map(r => [this.customerLabel(r, false), ...cols.map(c => r[c])].map(cell).join(',')));
+        const mt = this.jobMeta || { lines: {}, team: {}, assign: {} };
+        const extra = r => [[...(mt.lines[r.id] || [])].join('/'), r.job_stage || '', (mt.assign[r.id] || []).map(a => (mt.team[a.member_id] || {}).name).filter(Boolean).join('/')];
+        const rows = [['customer', 'services', 'stage', 'installers', ...cols].map(cell).join(',')].concat(q.map(r => [this.customerLabel(r, false), ...extra(r), ...cols.map(c => r[c])].map(cell).join(',')));
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
         a.download = `quotes_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -1872,6 +2014,614 @@ class VinylQuoteApp {
             if (!blob || blob.size >= file.size) return file;
             return new File([blob], file.name.replace(/\.\w+$/, '').replace(/[^\w-]/g, '_') + '.jpg', { type: 'image/jpeg' });
         } catch (e) { return file; }
+    }
+
+    // ---- Running jobs: plan a job (stage, date, deposit gate, installers) and manage the team ----
+    async openPlanJob(quoteId) {
+        const quote = this.savedQuotes.find(q => q.id === quoteId);
+        if (!quote) return;
+        const [t, a, o, b] = await Promise.all([
+            supabase.from('team_members').select('*').eq('active', true).order('name'),
+            supabase.from('job_assignments').select('member_id, is_lead').eq('quote_id', quoteId),
+            supabase.from('team_unavailability').select('member_id, day'),
+            supabase.from('job_assignments').select('member_id, quote_id')
+        ]);
+        if (t.error || a.error) { this.showError('Team tables not found. Run the database script first.'); return; }
+        const team = t.data || [], off = o.data || [], busy = b.data || [];
+        const sel = new Set((a.data || []).map(x => x.member_id));
+        let lead = ((a.data || []).find(x => x.is_lead) || {}).member_id || null;
+        const rangeDays = (s, n) => Array.from({ length: Math.max(1, n || 1) }, (_, i) => new Date(Date.parse(s + 'T00:00:00Z') + i * 864e5).toISOString().slice(0, 10));
+        const others = this.savedQuotes.filter(q => q.id !== quote.id && q.scheduled_date && !['rejected', 'completed'].includes(q.status));
+        const clash = (m, days) => {
+            if (off.some(x => x.member_id === m.id && days.includes(x.day))) return 'off';
+            return busy.some(x => x.member_id === m.id && others.some(q => q.id === x.quote_id && rangeDays(q.scheduled_date, q.project_days).some(d => days.includes(d)))) ? 'booked' : '';
+        };
+        const stages = [['accepted', 'Accepted'], ['deposit_requested', 'Deposit requested'], ['deposit_received', 'Deposit received'], ['scheduled', 'Scheduled'], ['in_progress', 'In progress'], ['snagging', 'Snagging'], ['awaiting_payment', 'Awaiting payment']];
+        const cur = quote.job_stage === 'quote' || !quote.job_stage ? 'accepted' : quote.job_stage;
+        const dep = parseFloat(quote.deposit_paid) > 0;
+        const ov = document.createElement('div');
+        ov.className = 'modal-overlay';
+        ov.innerHTML = `<div class="modal-content"><div class="modal-header"><h2 class="modal-title">Plan job: ${esc(quote.quote_name)}</h2></div>
+            <p class="dialog-message">Deposit: ${dep ? 'received (' + fmtR(quote.deposit_paid) + ')' : 'not received yet'}</p>
+            <form class="modal-form">
+            <label class="dialog-label" for="pj-stage">Stage</label>
+            <select id="pj-stage">${stages.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('')}</select>
+            <label class="dialog-label" for="pj-date">Install date (${quote.project_days || 1} day(s))</label>
+            <input type="date" id="pj-date" value="${esc(quote.scheduled_date || '')}">
+            <label class="dialog-label"><input type="checkbox" id="pj-ovr" ${quote.deposit_override ? 'checked' : ''}> Override: allow scheduling without a deposit</label>
+            <div class="dialog-label">Installers - <a href="#" id="pj-team">Manage team</a></div>
+            <div id="pj-chips"></div>
+            <label class="dialog-label" for="pj-lead">Lead installer</label><select id="pj-lead"></select>
+            <div class="modal-actions"><button type="submit" class="modal-save-btn">Save</button><button type="button" class="modal-cancel-btn">Cancel</button></div></form></div>`;
+        document.body.appendChild(ov);
+        const $ = s => ov.querySelector(s);
+        const draw = () => {
+            const d = $('#pj-date').value, days = d ? rangeDays(d, quote.project_days) : [];
+            $('#pj-chips').innerHTML = team.length ? team.map(m => {
+                const on = sel.has(m.id), c = d ? clash(m, days) : '', col = /^#[0-9a-f]{6}$/i.test(m.colour) ? m.colour : '#ff6a00';
+                return `<span><button type="button" class="pj-chip" data-id="${m.id}" style="border-color:${col};${on ? `background:${col};color:#fff` : ''}">${esc(m.name)}</button><small class="pj-tag">${c}</small></span>`;
+            }).join('') : '<p class="dialog-message">No team members yet. Tap Manage team to add them.</p>';
+            $('#pj-lead').innerHTML = '<option value="">No lead</option>' + team.filter(m => sel.has(m.id)).map(m => `<option value="${m.id}" ${lead === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
+        };
+        draw();
+        $('#pj-date').onchange = draw;
+        $('#pj-lead').onchange = e => { lead = e.target.value || null; };
+        $('#pj-chips').onclick = e => {
+            const id = e.target.dataset && e.target.dataset.id;
+            if (!id) return;
+            if (sel.has(id)) { sel.delete(id); if (lead === id) lead = null; } else sel.add(id);
+            draw();
+        };
+        $('#pj-team').onclick = e => { e.preventDefault(); this.openTeam(); };
+        $('.modal-cancel-btn').onclick = () => ov.remove();
+        $('form').onsubmit = async e => {
+            e.preventDefault();
+            const date = $('#pj-date').value || null, ovr = $('#pj-ovr').checked;
+            let stage = $('#pj-stage').value;
+            if (date && ['accepted', 'deposit_requested', 'deposit_received'].includes(stage)) stage = 'scheduled';
+            const gated = date || ['scheduled', 'in_progress', 'snagging', 'awaiting_payment'].includes(stage);
+            if (gated && quote.deposit_required !== false && !dep && !ovr) { this.showError('Deposit not received yet. Record it on the invoice, or tick the override.'); return; }
+            const days = date ? rangeDays(date, quote.project_days) : [];
+            const bad = team.filter(m => sel.has(m.id) && date && clash(m, days)).map(m => m.name);
+            if (bad.length && !await this.confirmBox(`${bad.join(', ')} already booked or off on these days. Assign anyway?`)) return;
+            let { error } = await supabase.from('saved_quotes').update({ job_stage: stage, scheduled_date: date, deposit_override: ovr }).eq('id', quote.id);
+            if (!error) ({ error } = await supabase.from('job_assignments').delete().eq('quote_id', quote.id));
+            if (!error && sel.size) ({ error } = await supabase.from('job_assignments').insert([...sel].map(id => ({ quote_id: quote.id, member_id: id, is_lead: id === lead }))));
+            if (error) { this.showError('Could not save: ' + error.message); return; }
+            ov.remove(); this.closeQuoteDetailsModal();
+            this.showSuccess('Job updated');
+            await this.loadSavedQuotes();
+        };
+    }
+
+    async openTeam() {
+        const { data, error } = await supabase.from('team_members').select('*').order('name');
+        if (error) { this.showError('Team tables not found. Run the database script first.'); return; }
+        const old = document.getElementById('team-modal'); if (old) old.remove();
+        const ov = document.createElement('div');
+        ov.className = 'modal-overlay'; ov.id = 'team-modal';
+        ov.innerHTML = `<div class="modal-content"><div class="modal-header"><h2 class="modal-title">Team (${data.length})</h2></div>`
+            + data.map(m => `<div class="cost-item" style="border-left:6px solid ${/^#[0-9a-f]{6}$/i.test(m.colour) ? m.colour : '#ff6a00'};padding-left:8px"><span>${esc(m.name)}${m.phone ? ' - ' + esc(m.phone) : ''}${m.active ? '' : ' (inactive)'}</span>
+                <span><button class="modal-save-btn" data-act="edit" data-id="${m.id}">Edit</button> <button class="modal-save-btn" data-act="day" data-id="${m.id}">Day off</button> <button class="modal-cancel-btn" data-act="off" data-id="${m.id}">${m.active ? 'Deactivate' : 'Activate'}</button></span></div>`).join('')
+            + `<div class="modal-actions"><button class="modal-save-btn" data-act="add">Add person</button><button class="modal-save-btn" data-act="bank">Bank details</button><button class="modal-cancel-btn" data-act="close">Close</button></div></div>`;
+        document.body.appendChild(ov);
+        ov.onclick = async e => {
+            const btn = e.target.closest('button'); if (!btn) return;
+            const act = btn.dataset.act, m = data.find(x => x.id === btn.dataset.id);
+            if (act === 'close') { ov.remove(); return; }
+            if (act === 'bank') { this.editBankDetails(); return; }
+            let err = null;
+            if (act === 'off') ({ error: err } = await supabase.from('team_members').update({ active: !m.active }).eq('id', m.id));
+            else if (act === 'day') {
+                const r = await this.ask({ title: 'Day off: ' + m.name, fields: [{ name: 'day', label: 'Date', type: 'date', required: true }, { name: 'note', label: 'Note (optional)' }], okText: 'Save' });
+                if (!r) return;
+                ({ error: err } = await supabase.from('team_unavailability').upsert({ member_id: m.id, day: r.day, note: r.note || null }, { onConflict: 'member_id,day' }));
+            } else {
+                const r = await this.ask({ title: m ? 'Edit team member' : 'Add team member', fields: [{ name: 'name', label: 'Name', value: m ? m.name : '', required: true }, { name: 'phone', label: 'Phone', type: 'tel', value: m ? (m.phone || '') : '' }, { name: 'colour', label: 'Calendar colour', type: 'color', value: m ? m.colour : '#ff6a00' }], okText: 'Save' });
+                if (!r) return;
+                const row = { name: r.name, phone: r.phone || null, colour: /^#[0-9a-f]{6}$/i.test(r.colour) ? r.colour : '#ff6a00' };
+                ({ error: err } = await (m ? supabase.from('team_members').update(row).eq('id', m.id) : supabase.from('team_members').insert(row)));
+            }
+            if (err) { this.showError(err.message); return; }
+            ov.remove(); this.openTeam();
+        };
+    }
+
+    async loadBusinessSettings() {
+        let { data, error } = await supabase.from('business_settings').select('bank, config').limit(1);
+        if (error) ({ data, error } = await supabase.from('business_settings').select('bank').limit(1));
+        if (error) { console.error('Business settings not available:', error.message); return; }
+        const row = data && data[0];
+        if (row && row.config) this.applyConfig(row.config);
+        if (row && Array.isArray(row.bank) && row.bank.length) { BUSINESS.bank = row.bank; return; }
+        BUSINESS.bank = [];
+        this.editBankDetails(true);
+    }
+
+    applyConfig(c) {
+        const set = (o, k, min) => { if (typeof c[k] === 'number' && c[k] >= min) o[k] = c[k]; };
+        set(PRICING, 'doorsPerSqm', 0.1); set(PRICING, 'sidesPerDay', 1); set(PRICING, 'installPerSide', 0); set(PRICING, 'foodPerDay', 0); set(PRICING, 'depositPct', 0); set(BUSINESS, 'validityDays', 1); set(BUSINESS, 'followUpDays', 1);
+        ['tinting', 'frosting', 'wallpaper'].forEach(k => { if (c.rates && typeof c.rates[k] === 'number' && c.rates[k] >= 0) SERVICES[k].rate = c.rates[k]; });
+        if (Array.isArray(c.materials) && c.materials.length) PRICING.materials = c.materials.filter(m => m && m.id && m.name && typeof m.rate === 'number');
+        if (Array.isArray(c.appliances) && c.appliances.length) PRICING.appliances = c.appliances.filter(a => a && a.id && a.name && typeof a.price === 'number');
+        Object.entries(c.scopes || {}).forEach(([k, v]) => { if (BUSINESS.scopes[k] && Array.isArray(v)) BUSINESS.scopes[k] = v.filter(s => typeof s === 'string' && s.trim()); });
+        Object.entries(c.notes || {}).forEach(([k, v]) => { if (typeof v === 'string') BUSINESS.notes[k] = v; });
+        this.renderMaterials();
+    }
+
+    async editBankDetails(first = false) {
+        const cur = Object.fromEntries(BUSINESS.bank);
+        const r = await this.ask({ title: 'Bank details for quotes and invoices', message: first ? 'Enter these once. They are stored privately and only loaded after you log in.' : '', fields: [
+            { name: 'bank', label: 'Bank name', value: cur['Bank'] || '', required: true },
+            { name: 'holder', label: 'Account holder', value: cur['Account holder'] || '', required: true },
+            { name: 'number', label: 'Account number', value: cur['Account number'] || '', required: true },
+            { name: 'type', label: 'Account type', value: cur['Account type'] || 'Current', required: true },
+            { name: 'branch', label: 'Branch code (optional)', value: cur['Branch code'] || '' }], okText: 'Save' });
+        if (!r) return;
+        const bank = [['Bank', r.bank], ['Account holder', r.holder], ['Account number', r.number], ['Account type', r.type]];
+        if (r.branch) bank.push(['Branch code', r.branch]);
+        const { error } = await supabase.from('business_settings').upsert({ owner_id: this.currentUser.id, bank, updated_at: new Date().toISOString() });
+        if (error) { this.showError('Could not save: ' + error.message); return; }
+        BUSINESS.bank = bank;
+        this.showSuccess('Bank details saved');
+    }
+
+    async loadJobMeta() {
+        this.jobMeta = { lines: {}, team: {}, assign: {}, costs: {} };
+        const [l, a, t, c] = await Promise.all([
+            supabase.from('quote_lines').select('quote_id, service_type'),
+            supabase.from('job_assignments').select('quote_id, member_id, is_lead'),
+            supabase.from('team_members').select('id, name, colour'),
+            supabase.from('job_costs').select('*')
+        ]);
+        (l.data || []).forEach(x => { (this.jobMeta.lines[x.quote_id] = this.jobMeta.lines[x.quote_id] || new Set()).add(x.service_type); });
+        (a.data || []).forEach(x => { (this.jobMeta.assign[x.quote_id] = this.jobMeta.assign[x.quote_id] || []).push(x); });
+        (t.data || []).forEach(x => { this.jobMeta.team[x.id] = x; });
+        (c.data || []).forEach(x => { this.jobMeta.costs[x.quote_id] = x; });
+    }
+
+    jobBadges(q) {
+        const m = this.jobMeta || { lines: {}, team: {}, assign: {} };
+        const svc = [...(m.lines[q.id] || [])].map(s => `<span class="svc-chip">${SERVICE_SHORT[s] || esc(s)}</span>`).join('');
+        const stage = STAGE_LABELS[q.job_stage] ? `<span class="stage-chip">${STAGE_LABELS[q.job_stage]}</span>` : '';
+        const who = (m.assign[q.id] || []).map(a => m.team[a.member_id]).filter(Boolean).map(p => `<span class="inst-chip"><i style="background:${/^#[0-9a-f]{6}$/i.test(p.colour) ? p.colour : '#adb5bd'}"></i>${esc(p.name)}</span>`).join('');
+        const fu = this.followUpState(q);
+        const fb = fu.expired ? '<span class="stage-chip" style="background:#f8d7da;color:#842029">Expired</span>' : (fu.due ? '<span class="stage-chip">Follow up due</span>' : '');
+        return (svc || stage || who || fb) ? `<div class="job-badges">${svc}${stage}${fb}${who}</div>` : '';
+    }
+
+    renderCalendarGrid(Y, M, statusFilter) {
+        const mt = this.jobMeta || { lines: {}, team: {}, assign: {} }, inst = this.calInstaller || '', pad = n => String(n).padStart(2, '0');
+        const byDay = {};
+        this.savedQuotes.forEach(q => {
+            if (!q.scheduled_date || ['completed', 'rejected'].includes(q.status) || (statusFilter === 'accepted' && q.status !== 'accepted')) return;
+            if (inst && !(mt.assign[q.id] || []).some(a => a.member_id === inst)) return;
+            for (let i = 0; i < Math.max(1, q.project_days || 1); i++) {
+                const d = new Date(Date.parse(q.scheduled_date + 'T00:00:00Z') + i * 864e5).toISOString().slice(0, 10);
+                (byDay[d] = byDay[d] || []).push({ q, i });
+            }
+        });
+        const lead = Math.round((new Date(Y, M - 1, 1).getDay() + 6) % 7);
+        let cells = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(x => `<div class="cal-dow">${x}</div>`).join('') + '<div class="cal-cell cal-empty"></div>'.repeat(lead);
+        for (let d = 1; d <= new Date(Y, M, 0).getDate(); d++) {
+            const es = byDay[`${Y}-${pad(M)}-${pad(d)}`] || [], seen = {};
+            es.forEach(({ q }) => (mt.assign[q.id] || []).forEach(a => { seen[a.member_id] = (seen[a.member_id] || 0) + 1; }));
+            const clash = Object.values(seen).some(n => n > 1);
+            cells += `<div class="cal-cell${clash ? ' cal-clash' : ''}"${clash ? ' title="An installer is booked on two jobs this day"' : ''}><div class="cal-num">${d}${clash ? ' ⚠' : ''}</div>${es.map(({ q, i }) => {
+                const as = mt.assign[q.id] || [], l1 = as.find(a => a.is_lead) || as[0], p = l1 && mt.team[l1.member_id];
+                const col = p && /^#[0-9a-f]{6}$/i.test(p.colour) ? p.colour : '#adb5bd';
+                const who = as.map(a => mt.team[a.member_id]).filter(Boolean).map(x => esc(x.name.split(' ')[0])).join(', ');
+                return `<button class="cal-chip" style="border-left-color:${col}" onclick="app.viewQuoteFromCalendar('${q.id}')">${esc(q.quote_name)}${i ? ' (day ' + (i + 1) + ')' : ''}${who ? `<small>${who}</small>` : ''}</button>`;
+            }).join('')}</div>`;
+        }
+        document.getElementById('calendar-view').innerHTML = `<div class="cal-toolbar"><select onchange="app.calInstaller = this.value; app.renderCalendar()"><option value="">All installers</option>${Object.values(mt.team).map(t => `<option value="${t.id}" ${inst === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div><div class="cal-scroll"><div class="cal-grid">${cells}</div></div>`;
+    }
+
+    draftKey() { return 'wrapmaster_draft_' + (this.currentUser ? this.currentUser.id : ''); }
+
+    saveDraft() {
+        if (!this.currentUser || this.editingId) return;
+        const $ = id => document.getElementById(id), m = document.querySelector('input[name="material"]:checked');
+        const d = { mode: this.calculatorMode, doors: $('doors-input').value, sqm: $('sqm-input').value, material: m ? m.value : '', colour: $('cabinet-colour').value, transport: $('transport-input').value, food: $('food-input').value, days: $('days-input').value, lines: this.serviceLines, items: this.customLineItems, name: $('quote-name-input').value, status: $('quote-status-select').value, date: $('scheduled-date-input').value, customer: $('customer-select').value, deposit: $('deposit-required').checked, touched: this.depositTouched };
+        try {
+            if (!d.doors && !d.sqm && !d.lines.length && !d.items.length && !d.name) localStorage.removeItem(this.draftKey());
+            else localStorage.setItem(this.draftKey(), JSON.stringify(d));
+        } catch (e) { /* storage unavailable */ }
+    }
+
+    applyDraft(d) {
+        const $ = id => document.getElementById(id);
+        if (d.mode === 'sqm') this.switchToSqmMode(); else this.switchToDoorsMode();
+        $('doors-input').value = d.doors; $('sqm-input').value = d.sqm;
+        const r = document.querySelector(`input[name="material"][value="${d.material}"]`); if (r) r.checked = true;
+        $('cabinet-colour').value = d.colour; $('transport-input').value = d.transport; $('food-input').value = d.food; $('days-input').value = d.days;
+        $('quote-name-input').value = d.name; $('quote-status-select').value = d.status; $('scheduled-date-input').value = d.date;
+        this.serviceLines = d.lines || []; this.customLineItems = d.items || [];
+        this.renderServiceLines(); this.renderCustomLineItems();
+        $('customer-select').value = d.customer; this.handleCustomerSelection();
+        this.depositTouched = !!d.touched; $('deposit-required').checked = d.deposit;
+        if (d.mode === 'sqm') this.handleSqmInput(); else this.handleDoorsInput();
+        this.handleMaterialSelection();
+        this.calculateQuote(true);
+    }
+
+    async restoreDraft() {
+        let d = null;
+        try { d = JSON.parse(localStorage.getItem(this.draftKey()) || 'null'); } catch (e) { return; }
+        if (!d) return;
+        if (!(await this.confirmBox('You have an unsaved quote draft. Restore it? (Photos are not kept in drafts.)'))) { try { localStorage.removeItem(this.draftKey()); } catch (e) { /* ignore */ } return; }
+        this.applyDraft(d);
+        this.showSuccess('Draft restored');
+    }
+
+    balanceOf(q) { return (parseFloat(q.total_cost) || 0) - (parseFloat(q.deposit_paid) || 0) - (parseFloat(q.final_payment_paid) || 0); }
+
+    stageOf(q) {
+        if (q.status === 'pending') return 'quote';
+        if (q.status === 'completed') return 'complete';
+        return STAGE_LABELS[q.job_stage] && q.job_stage !== 'complete' ? q.job_stage : 'accepted';
+    }
+
+    setView(v) {
+        this.savedView = v;
+        document.getElementById('view-list-btn').classList.toggle('active', v === 'list');
+        document.getElementById('view-board-btn').classList.toggle('active', v === 'board');
+        document.getElementById('saved-quotes-list').classList.toggle('hidden', v === 'board');
+        document.getElementById('board-view').classList.toggle('hidden', v !== 'board');
+        if (v === 'board') this.renderBoard();
+    }
+
+    renderBoard() {
+        const cols = [['quote', 'Quotes'], ['accepted', 'Accepted'], ['deposit_requested', 'Deposit requested'], ['deposit_received', 'Deposit received'], ['scheduled', 'Scheduled'], ['in_progress', 'In progress'], ['snagging', 'Snagging'], ['awaiting_payment', 'Awaiting payment'], ['complete', 'Complete']];
+        const num = v => parseFloat(v) || 0, mt = this.jobMeta || { lines: {}, team: {}, assign: {} };
+        const live = this.savedQuotes.filter(q => q.status !== 'rejected');
+        const done = live.filter(q => q.status === 'completed').sort((a, b) => String(b.completed_at || b.updated_at).localeCompare(String(a.completed_at || a.updated_at))).slice(0, 10);
+        const opts = cols.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+        const card = q => {
+            const bal = this.balanceOf(q), dep = num(q.deposit_paid) > 0;
+            const who = (mt.assign[q.id] || []).map(a => mt.team[a.member_id]).filter(Boolean).map(p => `<span class="inst-chip"><i style="background:${/^#[0-9a-f]{6}$/i.test(p.colour) ? p.colour : '#adb5bd'}"></i>${esc(p.name)}</span>`).join('');
+            const info = [q.scheduled_date ? '📅 ' + new Date(q.scheduled_date + 'T00:00:00').toLocaleDateString('en-ZA') : 'No date', q.deposit_required === false ? '' : (dep ? '💰 deposit in' : 'no deposit yet'), bal <= 0.005 && num(q.total_cost) > 0 ? 'paid' : '', this.followUpState(q).text].filter(Boolean).join(' · ');
+            return `<div class="board-card"><div class="board-title" onclick="app.viewQuoteDetails('${q.id}')">${esc(q.quote_name)}</div><div class="board-meta">${this.customerLabel(q)}${fmtR(q.total_cost)}</div><div class="board-meta">${info}</div>${who ? `<div class="job-badges">${who}</div>` : ''}${q.status === 'completed' ? `<div class="board-meta">${(this.costsOf(q) ? 'Profit ' + fmtR(this.costsOf(q).profit) : 'Costs not entered')}</div><button type="button" class="view-history-btn" onclick="app.editCosts('${q.id}')">💰 Costs</button>` : ''}<select onchange="app.moveJob('${q.id}', this.value)"><option value="">Move to...</option>${opts}</select></div>`;
+        };
+        document.getElementById('board-view').innerHTML = `<div class="board">${cols.map(([key, label]) => {
+            const items = key === 'complete' ? done : live.filter(q => q.status !== 'completed' && this.stageOf(q) === key);
+            return `<div class="board-col"><div class="board-col-head">${label}<span>${items.length}</span></div>${items.map(card).join('') || '<div class="board-empty">-</div>'}</div>`;
+        }).join('')}</div>`;
+    }
+
+    async moveJob(id, target) {
+        try { await this.moveJobInner(id, target); } finally { if (this.savedView === 'board') this.renderBoard(); }
+    }
+
+    async moveJobInner(id, target) {
+        const q = this.savedQuotes.find(x => x.id === id);
+        if (!q || !target || target === this.stageOf(q)) return;
+        const num = v => parseFloat(v) || 0, bal = this.balanceOf(q);
+        if (target === 'awaiting_payment' && bal <= 0.005 && num(q.total_cost) > 0) target = 'complete';
+        let upd;
+        if (target === 'quote') upd = { status: 'pending', job_stage: 'quote' };
+        else {
+            if (['scheduled', 'in_progress', 'snagging', 'awaiting_payment', 'complete'].includes(target) && q.deposit_required !== false && !(num(q.deposit_paid) > 0) && !q.deposit_override) {
+                this.showError('Deposit not received yet. Record it on the invoice, or open Plan Job and tick the override.'); return;
+            }
+            if (target === 'scheduled' && !q.scheduled_date) { this.openPlanJob(id); return; }
+            if (target === 'complete') {
+                if (bal > 0.005) { this.showError(`Complete means finished and paid. ${fmtR(bal)} is still outstanding. Record the final payment on the invoice first.`); return; }
+                if (!(await this.confirmBox('Mark this job as complete? It will move to History.'))) return;
+                upd = { status: 'completed', job_stage: 'complete', completed_at: new Date().toISOString() };
+            } else upd = { status: 'accepted', job_stage: target };
+        }
+        const { error } = await supabase.from('saved_quotes').update(upd).eq('id', id);
+        if (error) { this.showError('Could not move job: ' + error.message); return; }
+        await this.loadSavedQuotes();
+    }
+
+    async loadLedger(quoteId) {
+        const box = document.getElementById('payment-ledger');
+        if (!box) return;
+        const { data, error } = await supabase.from('payments').select('*').eq('quote_id', quoteId).order('paid_on').order('created_at');
+        if (error || !(data || []).length) { box.innerHTML = ''; return; }
+        box.innerHTML = '<h4>Payments:</h4>' + data.map(p => `<div class="custom-line-item"><span class="item-description">${new Date(p.paid_on + 'T00:00:00').toLocaleDateString('en-ZA')} - ${p.kind === 'deposit' ? 'Deposit' : 'Final'} - ${esc(String(p.method).toUpperCase())}${p.reference ? ' - ' + esc(p.reference) : ''}</span><span class="item-amount">${fmtR(p.amount)}</span><button type="button" class="remove-item-btn" aria-label="Delete payment" onclick="app.deletePayment('${p.id}', '${quoteId}')">×</button></div>`).join('');
+    }
+
+    async deletePayment(id, quoteId) {
+        if (!(await this.confirmBox('Delete this payment? The totals will be recalculated.'))) return;
+        const { error } = await supabase.from('payments').delete().eq('id', id);
+        if (error) { this.showError('Could not delete payment: ' + error.message); return; }
+        await this.loadSavedQuotes();
+        this.closeInvoiceModal();
+        const q = this.savedQuotes.find(x => x.id === quoteId);
+        if (q) this.showInvoiceModal(q, q.invoice_number);
+    }
+
+    syncEditUI(quote) {
+        const on = !!quote;
+        document.getElementById('save-quote-btn').textContent = on ? 'Update Quote' : 'Save Quote';
+        ['quote-status-select', 'scheduled-date-input'].forEach(id => { document.getElementById(id).disabled = on; });
+        let b = document.getElementById('edit-banner');
+        if (!on) { if (b) b.remove(); return; }
+        if (!b) { b = document.createElement('div'); b.id = 'edit-banner'; b.className = 'edit-banner'; document.getElementById('quote-section').prepend(b); }
+        b.innerHTML = `Editing ${esc(quote.quote_no || quote.quote_name)}. Status, date, installers and payments are kept. <button type="button" onclick="app.cancelEdit()">Cancel</button>`;
+    }
+
+    cancelEdit() { this.resetQuote(); this.showSavedQuotes(); }
+
+    async editFullQuote(id) {
+        const quote = this.savedQuotes.find(x => x.id === id);
+        if (!quote) return;
+        if (quote.status === 'completed') { this.showError('Completed jobs cannot be edited. Use Duplicate to make a new quote.'); return; }
+        if ((this.currentQuote || this.serviceLines.length || document.getElementById('doors-input').value) && !this.editingId && !(await this.confirmBox('Discard the quote you are building and edit this one instead?'))) return;
+        const [l, i] = await Promise.all([
+            supabase.from('quote_lines').select('*').eq('quote_id', id).order('position'),
+            supabase.from('custom_line_items').select('description, amount').eq('quote_id', id)
+        ]);
+        if (l.error || i.error) { this.showError('Could not load the quote to edit'); return; }
+        this.closeQuoteDetailsModal();
+        this.resetQuote();
+        await this.showQuoteSection();
+        const num = v => parseFloat(v) || 0, lines = l.data || [], kit = lines.find(x => x.service_type === 'kitchen');
+        const rest = lines.filter(x => x !== kit).map(r => ({ service_type: r.service_type, description: r.description, colour: r.colour, qty: num(r.qty), unit: r.unit, unit_price: r.unit_price == null ? null : num(r.unit_price), line_total: num(r.line_total), details: r.details || {} }));
+        const kSides = kit ? num(kit.qty) : (lines.length ? 0 : num(quote.doors)), wSides = rest.filter(x => x.service_type === 'wardrobe').reduce((s, x) => s + x.qty, 0);
+        const autoFood = Math.ceil((kSides + wSides) / PRICING.sidesPerDay) * PRICING.foodPerDay;
+        const autoDays = Math.max(1, Math.ceil((kSides + wSides) / PRICING.sidesPerDay) + (rest.some(x => x.service_type !== 'wardrobe') ? 1 : 0));
+        const matName = (kit && kit.details && kit.details.material) || quote.material_name;
+        this.applyDraft({
+            mode: 'doors', doors: kSides ? String(kSides) : '', sqm: '', material: (PRICING.materials.find(m => m.name === matName) || {}).id || '',
+            colour: (kit && kit.colour) || '', transport: num(quote.transport_cost) ? String(num(quote.transport_cost)) : '',
+            food: Math.abs(num(quote.food_cost) - autoFood) < 0.005 ? '' : String(num(quote.food_cost)),
+            days: num(quote.project_days) === autoDays ? '' : String(num(quote.project_days)),
+            lines: rest, items: (i.data || []).map(x => ({ description: x.description, amount: num(x.amount) })),
+            name: quote.quote_name, status: quote.status, date: quote.scheduled_date || '', customer: quote.customer_id || '', deposit: quote.deposit_required !== false, touched: true
+        });
+        this.editingId = id;
+        this.syncEditUI(quote);
+    }
+
+    async updateQuote() {
+        const id = this.editingId, old = this.savedQuotes.find(x => x.id === id), q = this.currentQuote;
+        if (!old || !q) { this.showError('Calculate the quote first'); return; }
+        if (((parseFloat(old.deposit_paid) || 0) + (parseFloat(old.final_payment_paid) || 0) > 0 || old.invoice_number) && !(await this.confirmBox('This quote has an invoice or payments. Changing the total changes what is still owed. Update it anyway?'))) return;
+        const btn = document.getElementById('save-quote-btn');
+        btn.disabled = true;
+        this.showLoading('Updating quote...');
+        const keys = ['customer_id', 'doors', 'square_metres', 'project_days', 'material_name', 'material_rate', 'material_cost', 'installation_fee', 'food_cost', 'transport_cost', 'custom_items_total', 'total_cost', 'quote_name', 'deposit_required'];
+        const oldCols = Object.fromEntries(keys.map(k => [k, old[k]]));
+        const [ol, oi] = await Promise.all([supabase.from('quote_lines').select('*').eq('quote_id', id), supabase.from('custom_line_items').select('*').eq('quote_id', id)]);
+        const rows = [];
+        if (q.hasCab) rows.push({ service_type: 'kitchen', description: SERVICES.kitchen.name, colour: document.getElementById('cabinet-colour').value.trim() || null, qty: q.doors, unit: 'sides', unit_price: null, line_total: q.materialCost + q.installationFee, details: { sqm: q.squareMetres, material: q.materialName, rate: q.materialRate } });
+        this.serviceLines.forEach(x => rows.push(x));
+        const newCols = { customer_id: document.getElementById('customer-select').value || null, doors: q.totalSides, square_metres: q.totalSqm, project_days: q.projectDays, material_name: q.materialName, material_rate: q.materialRate, material_cost: q.materialCost, installation_fee: q.installationFee, food_cost: q.foodCost, transport_cost: q.transportCost, custom_items_total: q.customItemsTotal || 0, total_cost: q.totalCost, quote_name: document.getElementById('quote-name-input').value.trim() || old.quote_name, deposit_required: document.getElementById('deposit-required').checked };
+        const chk = r => { if (r.error) throw r.error; };
+        try {
+            chk(await supabase.from('saved_quotes').update(newCols).eq('id', id));
+            chk(await supabase.from('quote_lines').delete().eq('quote_id', id));
+            chk(await supabase.from('custom_line_items').delete().eq('quote_id', id));
+            if (rows.length) chk(await supabase.from('quote_lines').insert(rows.map((r, i) => ({ ...r, quote_id: id, position: i }))));
+            if (this.customLineItems.length) chk(await supabase.from('custom_line_items').insert(this.customLineItems.map(x => ({ quote_id: id, description: x.description, amount: x.amount }))));
+        } catch (e) {
+            await supabase.from('saved_quotes').update(oldCols).eq('id', id);
+            await supabase.from('quote_lines').delete().eq('quote_id', id);
+            await supabase.from('custom_line_items').delete().eq('quote_id', id);
+            if ((ol.data || []).length) await supabase.from('quote_lines').insert(ol.data);
+            if ((oi.data || []).length) await supabase.from('custom_line_items').insert(oi.data);
+            this.hideLoading(); btn.disabled = false;
+            this.showError('Update failed, the quote was put back as it was: ' + e.message);
+            return;
+        }
+        let photoWarn = false;
+        if (this.uploadedPhotos.length) {
+            const recs = await this.uploadPhotosToStorage(id);
+            if (recs.length < this.uploadedPhotos.length) photoWarn = true;
+            if (recs.length) { const { error } = await supabase.from('quote_photos').insert(recs.map(p => ({ quote_id: id, ...p }))); if (error) photoWarn = true; }
+        }
+        this.hideLoading(); btn.disabled = false;
+        if (photoWarn) this.showError('Quote updated, but some photos were not saved.'); else this.showSuccess('Quote updated');
+        this.resetQuote();
+        setTimeout(() => this.showSavedQuotes(), 800);
+    }
+
+    async duplicateQuote(id) {
+        const quote = this.savedQuotes.find(x => x.id === id);
+        if (!quote) return;
+        if (!(await this.confirmBox(`Duplicate "${quote.quote_name}"? The copy starts as a new pending quote with no date, installers or payments.`))) return;
+        const row = { ...quote };
+        ['id', 'created_at', 'updated_at', 'quote_no', 'invoice_number', 'completed_at', 'scheduled_date', 'deposit_paid', 'final_payment_paid', 'payment_status', 'job_stage', 'deposit_override', 'is_public', 'last_followed_up_at', 'follow_up_note'].forEach(k => { delete row[k]; });
+        Object.assign(row, { user_id: this.currentUser.id, status: 'pending', quote_name: quote.quote_name + ' (copy)' });
+        const [l, i] = await Promise.all([supabase.from('quote_lines').select('*').eq('quote_id', id), supabase.from('custom_line_items').select('*').eq('quote_id', id)]);
+        const { data, error } = await supabase.from('saved_quotes').insert([row]).select();
+        if (error) { this.showError('Could not duplicate: ' + error.message); return; }
+        const nid = data[0].id, strip = r => { const { id: _a, quote_id: _q, owner_id: _o, created_at: _c, ...rest } = r; return { ...rest, quote_id: nid }; };
+        for (const [res, table] of [[l, 'quote_lines'], [i, 'custom_line_items']]) {
+            if ((res.data || []).length) {
+                const { error: e } = await supabase.from(table).insert(res.data.map(strip));
+                if (e) { await supabase.from('saved_quotes').delete().eq('id', nid); this.showError('Could not copy the quote contents, so no copy was made: ' + e.message); return; }
+            }
+        }
+        await this.loadSavedQuotes();
+        this.showSuccess('Quote duplicated');
+    }
+
+    costsOf(q) {
+        const c = (this.jobMeta && this.jobMeta.costs || {})[q.id];
+        if (!c) return null;
+        const cost = ['materials', 'labour', 'fuel', 'other'].reduce((s, k) => s + (parseFloat(c[k]) || 0), 0), rev = parseFloat(q.total_cost) || 0;
+        return { cost, profit: rev - cost, margin: rev > 0 ? (rev - cost) / rev * 100 : 0 };
+    }
+
+    profitLine(q) {
+        if (q.status !== 'completed') return '';
+        const k = this.costsOf(q);
+        return k ? `<div class="board-meta">Costs ${fmtR(k.cost)} · Profit ${fmtR(k.profit)} (${k.margin.toFixed(0)}%)</div>` : '<div class="board-meta">Costs not entered</div>';
+    }
+
+    async editCosts(id) {
+        const q = this.savedQuotes.find(x => x.id === id);
+        if (!q) return;
+        const c = (this.jobMeta.costs || {})[id] || {};
+        const f = (name, label) => ({ name, label, type: 'number', step: '0.01', min: 0, value: c[name] != null ? String(c[name]) : '' });
+        const r = await this.ask({ title: 'Job costs: ' + q.quote_name, message: `Charged: ${fmtR(q.total_cost)}. Enter what the job cost you. Blank counts as 0.`, fields: [
+            f('materials', 'Materials (R)'), f('labour', 'Labour (R)'), f('fuel', 'Fuel / transport (R)'), f('other', 'Other (R)'),
+            { name: 'note', label: 'Note (optional)', multiline: true, value: c.note || '' }], okText: 'Save' });
+        if (!r) return;
+        const n = v => Math.max(0, parseFloat(v) || 0);
+        const { error } = await supabase.from('job_costs').upsert({ quote_id: id, materials: n(r.materials), labour: n(r.labour), fuel: n(r.fuel), other: n(r.other), note: r.note || null, updated_at: new Date().toISOString() }, { onConflict: 'quote_id' });
+        if (error) { this.showError('Could not save costs: ' + error.message); return; }
+        await this.loadSavedQuotes();
+        if (this.filteredHistory) this.displayHistory();
+        this.showSuccess('Costs saved');
+    }
+
+    openDashboard() {
+        const old = document.getElementById('dash-modal'); if (old) old.remove();
+        const num = v => parseFloat(v) || 0, qs = this.savedQuotes || [], mt = this.jobMeta || { lines: {}, costs: {} };
+        const done = qs.filter(q => q.status === 'completed');
+        const decided = qs.filter(q => ['accepted', 'completed', 'rejected'].includes(q.status));
+        const won = decided.filter(q => q.status !== 'rejected').length;
+        const pipeline = qs.filter(q => q.status === 'pending').reduce((s, q) => s + num(q.total_cost), 0);
+        const owed = qs.filter(q => ['accepted', 'completed'].includes(q.status)).reduce((s, q) => s + Math.max(0, this.balanceOf(q)), 0);
+        const now = new Date(), months = [];
+        for (let i = 0; i < 6; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); }
+        const monthOf = q => String(q.completed_at || q.updated_at || q.created_at).slice(0, 7);
+        const mrow = m => {
+            const js = done.filter(q => monthOf(q) === m), withC = js.filter(q => this.costsOf(q));
+            const rev = js.reduce((s, q) => s + num(q.total_cost), 0), cost = withC.reduce((s, q) => s + this.costsOf(q).cost, 0), prof = withC.reduce((s, q) => s + this.costsOf(q).profit, 0);
+            return `<tr><td>${m}</td><td>${js.length}</td><td>${fmtR(rev)}</td><td>${fmtR(cost)}</td><td>${fmtR(prof)}</td><td>${js.length - withC.length}</td></tr>`;
+        };
+        const svc = {};
+        done.filter(q => this.costsOf(q)).forEach(q => {
+            const t = [...(mt.lines[q.id] || [])], key = t.length === 1 ? (SERVICE_SHORT[t[0]] || t[0]) : 'Mixed jobs', k = this.costsOf(q);
+            const s = svc[key] = svc[key] || { n: 0, rev: 0, prof: 0 };
+            s.n += 1; s.rev += num(q.total_cost); s.prof += k.profit;
+        });
+        const srows = Object.entries(svc).map(([k, s]) => `<tr><td>${k}</td><td>${s.n}</td><td>${fmtR(s.rev)}</td><td>${fmtR(s.prof)}</td><td>${s.rev > 0 ? Math.round(s.prof / s.rev * 100) : 0}%</td></tr>`).join('') || '<tr><td colspan="5">No jobs with costs yet</td></tr>';
+        const ov = document.createElement('div');
+        ov.className = 'modal-overlay'; ov.id = 'dash-modal';
+        ov.innerHTML = `<div class="modal-content dash-wide"><div class="modal-header"><h2 class="modal-title">Dashboard</h2></div>
+            <div class="history-stats">
+                <div class="stat-card"><div class="stat-value">${decided.length ? Math.round(won / decided.length * 100) + '%' : '-'}</div><div class="stat-label">Quote win rate</div></div>
+                <div class="stat-card"><div class="stat-value">${fmtR(pipeline)}</div><div class="stat-label">Pending quotes</div></div>
+                <div class="stat-card"><div class="stat-value">${fmtR(owed)}</div><div class="stat-label">Outstanding payments</div></div>
+            </div>
+            <h4>Completed jobs by month</h4>
+            <div class="dash-scroll"><table class="dash-table"><tr><th>Month</th><th>Jobs</th><th>Revenue</th><th>Costs</th><th>Profit</th><th>Costs missing</th></tr>${months.map(mrow).join('')}</table></div>
+            <p class="dash-note">Costs and profit only include jobs where you have entered costs.</p>
+            <h4>Profit by service (jobs with costs)</h4>
+            <div class="dash-scroll"><table class="dash-table"><tr><th>Service</th><th>Jobs</th><th>Revenue</th><th>Profit</th><th>Margin</th></tr>${srows}</table></div>
+            <p class="dash-note">Jobs with more than one service are grouped as Mixed jobs.</p>
+            <div class="modal-actions"><button class="modal-cancel-btn">Close</button></div></div>`;
+        document.body.appendChild(ov);
+        ov.querySelector('.modal-cancel-btn').onclick = () => ov.remove();
+    }
+
+    openSettings() {
+        const old = document.getElementById('settings-modal'); if (old) old.remove();
+        const P = PRICING, S = SERVICES, B = BUSINESS, kinds = Object.keys(B.scopes);
+        const num = (id, label, val, step = '0.01') => `<label class="dialog-label" for="st-${id}">${label}</label><input type="number" id="st-${id}" min="0" step="${step}" value="${esc(String(val))}">`;
+        const area = (id, label, val, rows = 4) => `<label class="dialog-label" for="st-${id}">${label}</label><textarea id="st-${id}" rows="${rows}">${esc(val)}</textarea>`;
+        const ov = document.createElement('div');
+        ov.className = 'modal-overlay'; ov.id = 'settings-modal';
+        ov.innerHTML = `<div class="modal-content dash-wide"><div class="modal-header"><h2 class="modal-title">Settings</h2></div><form class="modal-form">
+            <h4>Rates and rules</h4>
+            ${num('installPerSide', 'Installation per side (R)', P.installPerSide)}${num('foodPerDay', 'Food per day (R)', P.foodPerDay)}${num('sidesPerDay', 'Sides per day (team capacity)', P.sidesPerDay, '1')}${num('doorsPerSqm', 'Doors per m²', P.doorsPerSqm)}
+            ${num('depositPct', 'Deposit (%)', P.depositPct, '1')}${num('validityDays', 'Quote valid for (days)', B.validityDays, '1')}${num('followUpDays', 'Follow up pending quotes after (days)', B.followUpDays, '1')}
+            ${num('tinting', 'Window tinting (R per m²)', S.tinting.rate)}${num('frosting', 'Window frosting (R per m²)', S.frosting.rate)}${num('wallpaper', 'Wallpaper (R per m²)', S.wallpaper.rate)}
+            <h4>Materials (internal; one per line as Name | price per m²)</h4>${area('materials', '', P.materials.map(m => `${m.name} | ${m.rate}`).join('\n'), 6)}
+            <h4>Appliances (one per line as Name | price)</h4>${area('appliances', '', P.appliances.map(a => `${a.name} | ${a.price}`).join('\n'), 7)}
+            <h4>Scope of work (one item per line)</h4>${kinds.map(k => area('scope-' + k, SERVICES[k].name, B.scopes[k].join('\n'))).join('')}
+            <h4>"Please note" text (empty means none)</h4>${kinds.map(k => area('note-' + k, SERVICES[k].name, B.notes[k] || '', 3)).join('')}
+            <div class="modal-actions"><button type="submit" class="modal-save-btn">Save settings</button><button type="button" class="modal-cancel-btn" data-act="bank">Bank details</button><button type="button" class="modal-cancel-btn" data-act="close">Close</button></div></form></div>`;
+        document.body.appendChild(ov);
+        const form = ov.querySelector('form'), $ = id => form.querySelector('#st-' + id);
+        ov.querySelector('[data-act="close"]').onclick = () => ov.remove();
+        ov.querySelector('[data-act="bank"]').onclick = () => this.editBankDetails();
+        const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'item';
+        const parse = (id, label) => $(id).value.split('\n').map(s => s.trim()).filter(Boolean).map(line => {
+            const m = line.match(/^(.+?)\s*\|\s*(\d+(?:[.,]\d+)?)$/);
+            if (!m) throw new Error(`Could not read "${line}" in ${label}. Use: Name | price`);
+            return [m[1].trim(), parseFloat(m[2].replace(',', '.'))];
+        });
+        form.onsubmit = async e => {
+            e.preventDefault();
+            try {
+                const n = id => { const x = parseFloat($(id).value); if (!(x >= 0)) throw new Error('Please check the numbers under Rates and rules'); return x; };
+                const used = new Set();
+                const withIds = (rows, old, key) => rows.map(([name, val]) => {
+                    let id = (old.find(o => o.name === name) || {}).id || slug(name);
+                    while (used.has(id)) id += '_';
+                    used.add(id);
+                    return { id, name, [key]: val };
+                });
+                const materials = withIds(parse('materials', 'Materials'), P.materials, 'rate');
+                if (!materials.length) throw new Error('Add at least one material');
+                used.clear();
+                const cfg = {
+                    installPerSide: n('installPerSide'), foodPerDay: n('foodPerDay'), sidesPerDay: Math.max(1, n('sidesPerDay')), doorsPerSqm: Math.max(0.1, n('doorsPerSqm')),
+                    depositPct: Math.min(100, n('depositPct')), validityDays: Math.max(1, Math.round(n('validityDays'))), followUpDays: Math.max(1, Math.round(n('followUpDays'))),
+                    rates: { tinting: n('tinting'), frosting: n('frosting'), wallpaper: n('wallpaper') },
+                    materials, appliances: withIds(parse('appliances', 'Appliances'), P.appliances, 'price'), scopes: {}, notes: {}
+                };
+                kinds.forEach(k => { cfg.scopes[k] = $('scope-' + k).value.split('\n').map(s => s.trim()).filter(Boolean); cfg.notes[k] = $('note-' + k).value.trim(); });
+                const { error } = await supabase.from('business_settings').upsert({ owner_id: this.currentUser.id, config: cfg, updated_at: new Date().toISOString() });
+                if (error) throw error;
+                this.applyConfig(cfg);
+                ov.remove();
+                this.showSuccess('Settings saved');
+            } catch (err) { this.showError(err.message); }
+        };
+    }
+
+    followUpState(q) {
+        if (q.status !== 'pending') return { due: false, expired: false, age: 0, text: '' };
+        const day = 864e5, now = Date.now(), made = new Date(q.created_at).getTime(), last = q.last_followed_up_at ? new Date(q.last_followed_up_at).getTime() : made;
+        const expired = now - made >= BUSINESS.validityDays * day, due = now - last >= BUSINESS.followUpDays * day;
+        return { due, expired, age: Math.floor((now - made) / day), text: expired ? 'Expired' : (due ? 'Follow up due' : '') };
+    }
+
+    updateFollowUpCount() {
+        const n = (this.savedQuotes || []).filter(q => { const s = this.followUpState(q); return s.due || s.expired; }).length;
+        document.querySelectorAll('.fu-btn').forEach(b => { b.textContent = '📞 Follow-ups' + (n ? ` (${n})` : ''); });
+    }
+
+    waNumber(p) {
+        const d = String(p || '').replace(/\D/g, '');
+        if (!d) return '';
+        return d.startsWith('0') ? '27' + d.slice(1) : d;
+    }
+
+    openFollowUps() {
+        const old = document.getElementById('fu-modal'); if (old) old.remove();
+        const qs = (this.savedQuotes || []).filter(q => { const s = this.followUpState(q); return s.due || s.expired; })
+            .sort((a, b) => new Date(a.last_followed_up_at || a.created_at) - new Date(b.last_followed_up_at || b.created_at));
+        const rows = qs.map(q => {
+            const c = this.customers.find(x => x.id === q.customer_id) || {}, s = this.followUpState(q), ph = String(c.phone || '').trim(), wa = this.waNumber(ph);
+            const contact = ph ? `<a class="svc-chip" href="tel:${esc(ph.replace(/[^\d+]/g, ''))}">📞 Call</a>` + (wa ? `<a class="svc-chip" target="_blank" rel="noopener" href="https://wa.me/${wa}">💬 WhatsApp</a>` : '') : '<span class="inst-chip">No phone saved</span>';
+            return `<div class="board-card"><div class="board-title" data-act="open" data-id="${q.id}">${esc(q.quote_name)}${s.expired ? ' <span class="stage-chip" style="background:#f8d7da;color:#842029">Expired</span>' : ''}</div>
+                <div class="board-meta">${c.name ? esc(c.name) + ' · ' : ''}${fmtR(q.total_cost)} · quoted ${s.age} day(s) ago</div>
+                <div class="board-meta">${q.last_followed_up_at ? 'Last followed up ' + new Date(q.last_followed_up_at).toLocaleDateString('en-ZA') + (q.follow_up_note ? ': ' + esc(q.follow_up_note) : '') : 'Not followed up yet'}</div>
+                <div class="job-badges">${contact}</div>
+                <div class="modal-actions"><button class="modal-save-btn" data-act="done" data-id="${q.id}">Followed up</button><button class="modal-save-btn" data-act="accept" data-id="${q.id}">Accepted</button><button class="modal-cancel-btn" data-act="reject" data-id="${q.id}">Rejected</button></div></div>`;
+        }).join('') || '<p class="dialog-message">Nothing to follow up right now.</p>';
+        const ov = document.createElement('div');
+        ov.className = 'modal-overlay'; ov.id = 'fu-modal';
+        ov.innerHTML = `<div class="modal-content dash-wide"><div class="modal-header"><h2 class="modal-title">Follow-ups (${qs.length})</h2></div><p class="dialog-message">Pending quotes older than ${BUSINESS.followUpDays} day(s) since they were made or last chased. Quotes older than ${BUSINESS.validityDays} days are marked Expired.</p>${rows}<div class="modal-actions"><button class="modal-cancel-btn" data-act="close">Close</button></div></div>`;
+        document.body.appendChild(ov);
+        ov.onclick = async e => {
+            const b = e.target.closest('[data-act]'); if (!b) return;
+            const act = b.dataset.act, id = b.dataset.id;
+            if (act === 'close') { ov.remove(); return; }
+            if (act === 'open') { ov.remove(); this.viewQuoteDetails(id); return; }
+            if (act === 'done') {
+                const r = await this.ask({ title: 'Followed up', fields: [{ name: 'note', label: 'Note (optional)', multiline: true }], okText: 'Save' });
+                if (!r) return;
+                const { error } = await supabase.from('saved_quotes').update({ last_followed_up_at: new Date().toISOString(), follow_up_note: r.note || null }).eq('id', id);
+                if (error) { this.showError('Could not save: ' + error.message); return; }
+                await this.loadSavedQuotes();
+                this.openFollowUps();
+                return;
+            }
+            ov.remove();
+            await this.changeQuoteStatus(id, act === 'accept' ? 'accepted' : 'rejected');
+        };
     }
 
     toast(message, type) {
@@ -1901,7 +2651,8 @@ class VinylQuoteApp {
             ov.setAttribute('aria-modal', 'true');
             const rows = fields.map((f, i) => {
                 const v = esc(f.value ?? '');
-                const input = f.multiline
+                if (f.type === 'checks') return `<div class="dialog-label">${esc(f.label)} <a href="#" data-all="${i}">Select all</a><a href="#" data-none="${i}">Select none</a></div><div class="dlg-checks" id="dlg-${i}">${f.options.map((o, k) => `<label class="dlg-check"><input type="checkbox" value="${k}"${(f.checked || []).includes(o) ? ' checked' : ''}> ${esc(o)}</label>`).join('')}</div>`;
+                const input = f.type === 'select' ? `<select id="dlg-${i}">${f.options.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join('')}</select>` : f.multiline
                     ? `<textarea id="dlg-${i}" rows="3">${v}</textarea>`
                     : `<input id="dlg-${i}" type="${f.type || 'text'}" ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} value="${v}">`;
                 return `<label class="dialog-label" for="dlg-${i}">${esc(f.label)}${f.required ? ' *' : ''}</label>${input}`;
@@ -1916,10 +2667,16 @@ class VinylQuoteApp {
             const done = v => { document.removeEventListener('keydown', onKey); ov.remove(); resolve(v); };
             document.addEventListener('keydown', onKey);
             ov.querySelector('.modal-cancel-btn').onclick = () => done(null);
+            ov.querySelectorAll('[data-all],[data-none]').forEach(a => a.onclick = e => {
+                e.preventDefault();
+                const all = a.dataset.all !== undefined, i = all ? a.dataset.all : a.dataset.none;
+                form.querySelectorAll('#dlg-' + i + ' input').forEach(c => { c.checked = all; });
+            });
             form.onsubmit = e => {
                 e.preventDefault();
                 const out = {};
                 for (const [i, f] of fields.entries()) {
+                    if (f.type === 'checks') { out[f.name] = [...form.querySelectorAll('#dlg-' + i + ' input:checked')].map(c => f.options[c.value]); continue; }
                     const val = form.querySelector('#dlg-' + i).value.trim();
                     if (f.required && !val) { this.showError(`${f.label} is required`); return; }
                     out[f.name] = val;
@@ -1966,6 +2723,16 @@ class VinylQuoteApp {
         document.getElementById('customer-select').value = '';
         this.handleCustomerSelection();
         this.currentQuote = null;
+        this.serviceLines = [];
+        this.renderServiceLines();
+        this.depositTouched = false;
+        document.getElementById('deposit-required').checked = true;
+        document.getElementById('food-input').value = '';
+        document.getElementById('days-input').value = '';
+        document.getElementById('cabinet-colour').value = '';
+        this.editingId = null;
+        this.syncEditUI(null);
+        try { localStorage.removeItem(this.draftKey()); } catch (e) { /* ignore */ }
     }
 
     // Search and Filter Methods
@@ -2047,13 +2814,20 @@ class VinylQuoteApp {
         const quote = this.savedQuotes.find(q => q.id === quoteId);
         if (!quote) { this.showError('Quote not found'); return; }
         const l = this.customers.find(c => c.id === quote.customer_id) || {};
+        const { data: sl } = await supabase.from('quote_lines').select('service_type, colour').eq('quote_id', quote.id);
+        const kinds = [...new Set((sl || []).map(x => x.service_type))];
+        const opts = [...new Set((kinds.length ? kinds : ['kitchen']).flatMap(t => BUSINESS.scopes[t] || []))];
         const r = await this.ask({ title: 'Quote details', fields: [
             { name: 'name', label: 'Customer name', value: l.name || '', required: true },
             { name: 'address', label: 'Address (one line per row)', value: l.address || '', multiline: true },
             { name: 'phone', label: 'Phone (optional)', value: l.phone || '', type: 'tel' },
             { name: 'email', label: 'Email (optional)', value: l.email || '', type: 'email' },
-            { name: 'colour', label: 'Colour / finish chosen', required: true }], okText: 'Export PDF' });
+            { name: 'colour', label: 'Colour / finish chosen', value: (sl || []).map(x => x.colour).find(Boolean) || '', required: true },
+            { name: 'scope', type: 'checks', label: 'Scope of work (tick what is included)', options: opts, checked: (quote.scope_selected || {}).items || [] },
+            { name: 'extra', label: 'Extra scope (one item per line)', multiline: true, value: (quote.scope_selected || {}).extra || '' }], okText: 'Export PDF' });
         if (!r) return;
+        quote.scope_selected = { items: r.scope, extra: r.extra };
+        supabase.from('saved_quotes').update({ scope_selected: quote.scope_selected }).eq('id', quote.id).then(() => {}, () => {});
         await this.buildPDF('quote', quote, r);
     }
 
@@ -2106,7 +2880,7 @@ class VinylQuoteApp {
             const { jsPDF } = window.jspdf, doc = new jsPDF(), inv = kind === 'invoice', num = v => parseFloat(v) || 0;
             const total = num(quote.total_cost), extra = num(quote.custom_items_total), paid = num(quote.deposit_paid) + num(quote.final_payment_paid);
             const ref = `KWM-${String(quote.created_at).slice(0, 10).replace(/-/g, '')}-${String(quote.id).slice(-4).toUpperCase()}`;
-            const docNo = inv ? (quote.invoice_number || ref.replace('KWM', 'INV')) : ref;
+            const docNo = inv ? (quote.invoice_number || ref.replace('KWM', 'INV')) : (quote.quote_no || ref);
             let items = [];
             if (extra !== 0) {
                 const { data } = await supabase.from('custom_line_items').select('description, amount').eq('quote_id', quote.id);
@@ -2114,7 +2888,8 @@ class VinylQuoteApp {
             }
             const logo = await this.loadLogo(), today = new Date(), day = d => d.toLocaleDateString('en-ZA');
             const finish = c.colour || '';
-            let y = this.pdfHead(doc, logo, inv ? 'INVOICE' : 'QUOTATION', [`${inv ? 'Invoice' : 'Quote'} no: ${docNo}`, `Date: ${day(today)}`, inv ? `Quote ref: ${ref}` : `Valid until: ${day(new Date(today.getTime() + 30 * 864e5))}`]);
+            const scope = [...(c.scope || []), ...String(c.extra || '').split('\n').map(s => s.trim()).filter(Boolean)];
+            let y = this.pdfHead(doc, logo, inv ? 'INVOICE' : 'QUOTATION', [`${inv ? 'Invoice' : 'Quote'} no: ${docNo}`, `Date: ${day(today)}`, inv ? `Quote ref: ${quote.quote_no || ref}` : `Valid until: ${day(new Date(today.getTime() + BUSINESS.validityDays * 864e5))}`]);
             y = this.pdfParties(doc, y, inv ? 'BILL TO' : 'PREPARED FOR', c);
             const need = h => { if (y + h > 276) { doc.addPage(); y = 20; } };
             const head = t => { need(14); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...ORANGE); doc.text(t, 15, y); doc.setDrawColor(...DARK); doc.setLineWidth(0.3); doc.line(15, y + 1.8, 195, y + 1.8); y += 8; };
@@ -2130,18 +2905,30 @@ class VinylQuoteApp {
             // line items
             doc.setFillColor(...DARK); doc.rect(15, y, 180, 8, 'F');
             doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(255, 255, 255);
-            doc.text('Qty', 19, y + 5.5); doc.text('Description', 35, y + 5.5); doc.text('Unit price', 158, y + 5.5, { align: 'right' }); doc.text('Total', 191, y + 5.5, { align: 'right' });
+            doc.text('Qty', 19, y + 5.5); doc.text('Description', 40, y + 5.5); doc.text('Unit price', 158, y + 5.5, { align: 'right' }); doc.text('Total', 191, y + 5.5, { align: 'right' });
             doc.setFillColor(...ORANGE); doc.rect(15, y + 8, 180, 0.8, 'F'); y += 15;
-            const rows = [{ t: 'Kitchen cabinet wrapping', d: finish, a: total - extra }, ...items.map(i => ({ t: i.description, a: num(i.amount) }))];
-            rows.forEach(r => {
-                const lines = doc.splitTextToSize(String(r.t), 105), h = lines.length * 4.6 + (r.d ? 5 : 0) + 4;
-                need(h);
+            const { data: qd } = await supabase.from('quote_lines').select('*').eq('quote_id', quote.id).order('position');
+            const qLines = qd || [], rest = total - extra - qLines.reduce((s, l) => s + num(l.line_total), 0);
+            const types = qLines.length ? [...new Set(qLines.map(l => l.service_type))] : ['kitchen'];
+            const perUnit = l => ['appliance', 'tinting', 'frosting', 'wallpaper'].includes(l.service_type);
+            let rows = qLines.length ? qLines.map(l => ({ t: l.description, d: l.colour || c.colour || '', q: perUnit(l) ? (l.service_type === 'appliance' ? String(num(l.qty)) : num(l.qty) + ' m²') : '1', n: perUnit(l) ? (num(l.qty) || 1) : 1, a: num(l.line_total) })) : [{ t: 'Kitchen cabinet wrapping', d: finish, q: '1', n: 1, a: total - extra }];
+            if (qLines.length && rest > 0.005) {
+                // transport / call-out is never shown: it is loaded into the line prices
+                const k = qLines.findIndex(l => ['kitchen', 'wardrobe'].includes(l.service_type));
+                if (k >= 0) rows[k].a += rest;
+                else { const base = rows.reduce((s, r) => s + r.a, 0) || 1; let left = rest; rows.forEach((r, i) => { const add = i === rows.length - 1 ? left : Math.round(rest * r.a / base * 100) / 100; r.a += add; left -= add; }); }
+            }
+            rows = rows.concat(items.map(i => ({ t: i.description, q: '1', n: 1, a: num(i.amount) })));
+            rows.forEach((r, idx) => {
+                const lines = doc.splitTextToSize(String(r.t), 92), rh = (lines.length + (r.d ? 1 : 0)) * 5 + 5;
+                need(rh + 2);
+                if (idx % 2 === 0) { doc.setFillColor(...SOFT); doc.rect(15, y - 5, 180, rh, 'F'); }
                 doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...DARK);
-                doc.text('1', 19, y); doc.text(lines, 35, y);
-                if (r.d) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GREY); doc.text(r.d, 35, y + lines.length * 4.6); }
+                doc.text(r.q, 19, y); doc.text(lines, 40, y);
+                if (r.d) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GREY); doc.text(r.d, 40, y + lines.length * 5); }
                 doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...DARK);
-                doc.text(fmtR(r.a), 158, y, { align: 'right' }); doc.text(fmtR(r.a), 191, y, { align: 'right' });
-                y += h; doc.setDrawColor(225, 225, 222); doc.setLineWidth(0.2); doc.line(15, y - 2.5, 195, y - 2.5);
+                doc.text(fmtR(r.a / r.n), 158, y, { align: 'right' }); doc.text(fmtR(r.a), 191, y, { align: 'right' });
+                y += rh + 2;
             });
             y += 4;
 
@@ -2149,7 +2936,7 @@ class VinylQuoteApp {
             need(34);
             const line = (l, v, yy) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...DARK); doc.text(l, 125, yy); doc.text(v, 191, yy, { align: 'right' }); };
             line('Subtotal', fmtR(total), y);
-            line(inv ? 'Amount paid' : 'Deposit required (50%)', fmtR(inv ? paid : total / 2), y + 6);
+            if (inv || quote.deposit_required !== false) line(inv ? 'Amount paid' : `Deposit required (${PRICING.depositPct}%)`, fmtR(inv ? paid : total * PRICING.depositPct / 100), y + 6);
             y += 11;
             doc.setFillColor(...DARK); doc.rect(120, y, 75, 11, 'F'); doc.setFillColor(...ORANGE); doc.rect(120, y, 2.5, 11, 'F');
             doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text(inv ? 'BALANCE DUE' : 'TOTAL', 127, y + 7.2);
@@ -2160,15 +2947,16 @@ class VinylQuoteApp {
                 need(12); doc.setFillColor(...st[1]); doc.roundedRect(15, y - 3, 44, 8, 1.5, 1.5, 'F');
                 doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(255, 255, 255); doc.text(st[0], 37, y + 2.3, { align: 'center' }); y += 12;
             } else {
-                need(30); head('SCOPE OF WORK');
-                BUSINESS.scope.forEach(s => {
+                if (scope.length) { need(30); head('SCOPE OF WORK'); }
+                scope.forEach(s => {
                     need(6); doc.setDrawColor(...ORANGE); doc.setLineWidth(0.6); doc.line(16, y - 1, 17.2, y + 0.3); doc.line(17.2, y + 0.3, 19.6, y - 2.6);
-                    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...DARK); doc.text(s, 23, y); y += 5.2;
+                    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...DARK); const ls = doc.splitTextToSize(s, 168); doc.text(ls, 23, y); y += 5.2 * ls.length;
                 });
                 y += 3;
-                const ex = doc.splitTextToSize('Please note: ' + BUSINESS.exclusions, 168), bh = ex.length * 4.4 + 6;
-                need(bh + 8); doc.setFillColor(255, 243, 232); doc.rect(15, y, 180, bh, 'F'); doc.setFillColor(...ORANGE); doc.rect(15, y, 1.4, bh, 'F');
-                doc.setFont('helvetica', 'normal'); doc.setFontSize(8.8); doc.setTextColor(...DARK); doc.text(ex, 21, y + 5); y += bh + 8;
+                const sents = [...new Set(types.flatMap(t => (BUSINESS.notes[t] || '').match(/[^.]+\./g) || []).map(s => s.trim()))];
+                const ex = sents.length ? doc.splitTextToSize('Please note: ' + sents.join(' '), 168) : [], bh = ex.length * 4.4 + 6;
+                if (ex.length) { need(bh + 8); doc.setFillColor(255, 243, 232); doc.rect(15, y, 180, bh, 'F'); doc.setFillColor(...ORANGE); doc.rect(15, y, 1.4, bh, 'F');
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(8.8); doc.setTextColor(...DARK); doc.text(ex, 21, y + 5); y += bh + 8; }
             }
 
             // payment details
@@ -2179,7 +2967,7 @@ class VinylQuoteApp {
                 doc.setFont('helvetica', 'bold'); doc.setTextColor(...DARK); doc.text(v, 50, y + i * 5.2);
             });
             const terms = inv ? ['Balance is due on completion of the work.', 'Please use the invoice number as your payment reference.']
-                : [`At least 50% (${fmtR(total / 2)}) is payable upfront for material procurement before work commences.`, 'Quote valid for 30 days from the date of issue.', 'Balance is due on completion of the work.'];
+                : quote.deposit_required === false ? ['Payment is due on completion of the work.', `Quote valid for ${BUSINESS.validityDays} days from the date of issue.`] : [`At least ${PRICING.depositPct}% (${fmtR(total * PRICING.depositPct / 100)}) is payable upfront for material procurement before work commences.`, `Quote valid for ${BUSINESS.validityDays} days from the date of issue.`, 'Balance is due on completion of the work.'];
             let ty = top; doc.setFontSize(8.8);
             terms.forEach(t => {
                 doc.setFont('helvetica', 'normal'); doc.setTextColor(...DARK); const ls = doc.splitTextToSize(t, 72);
