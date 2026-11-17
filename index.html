@@ -4,7 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kitchen Vinyl Wrapping Quotes</title>
+    <title>Kitchen Wrap Masters - Quotes</title>
+    <meta name="theme-color" content="#1a1f1f">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -14,6 +18,8 @@
     <div class="container">
         <!-- Login/Signup Section -->
         <div id="auth-section" class="auth-container">
+            <img class="brand-logo brand-logo-lg" alt="Kitchen Wrap Masters">
+            <div class="auth-tagline">WRAP IT · PROTECT IT · LOVE IT</div>
             <div class="auth-tabs">
                 <button id="login-tab" class="tab-btn active">Login</button>
                 <button id="signup-tab" class="tab-btn">Sign Up</button>
@@ -44,7 +50,8 @@
         <!-- Quote Calculator Section -->
         <div id="quote-section" class="quote-container hidden">
             <div class="header">
-                <h1>Kitchen Vinyl Wrapping Quote Calculator</h1>
+                <img class="brand-logo" alt="Kitchen Wrap Masters">
+                <h1>New Quote</h1>
                 <div class="header-actions">
                     <button id="nav-customers-btn" class="nav-btn">👥 Customers</button>
                     <button id="nav-quotes-btn" class="nav-btn">📄 Quotes</button>
@@ -102,6 +109,7 @@
                     <div id="service-lines"></div>
                     <div class="service-buttons">
                         <button type="button" class="service-btn" data-svc="wardrobe">+ Wardrobe</button>
+                        <button type="button" class="service-btn" data-svc="countertop">+ Countertop</button>
                         <button type="button" class="service-btn" data-svc="appliance">+ Appliance</button>
                         <button type="button" class="service-btn" data-svc="tinting">+ Window Tinting</button>
                         <button type="button" class="service-btn" data-svc="frosting">+ Window Frosting</button>
@@ -179,7 +187,8 @@
         <!-- Customers Section -->
         <div id="customers-section" class="customers-container hidden">
             <div class="header">
-                <h1>Customer Management</h1>
+                <img class="brand-logo" alt="Kitchen Wrap Masters">
+                <h1>Customers</h1>
                 <div class="header-actions">
                     <button id="nav-calculator-btn-2" class="nav-btn">🏠 Calculator</button>
                     <button id="nav-quotes-btn-2" class="nav-btn">📄 Quotes</button>
@@ -210,6 +219,7 @@
         <!-- Calendar Section -->
         <div id="calendar-section" class="calendar-container hidden">
             <div class="header">
+                <img class="brand-logo" alt="Kitchen Wrap Masters">
                 <h1>Project Calendar</h1>
                 <div class="header-actions">
                     <button id="nav-calculator-btn-3" class="nav-btn">🏠 Calculator</button>
@@ -244,7 +254,8 @@
         <!-- History Section -->
         <div id="history-section" class="history-container hidden">
             <div class="header">
-                <h1>📋 Completed Projects History</h1>
+                <img class="brand-logo" alt="Kitchen Wrap Masters">
+                <h1>Job History</h1>
                 <div class="header-actions">
                     <button id="nav-calculator-btn-4" class="nav-btn">🏠 Calculator</button>
                     <button id="nav-customers-btn-4" class="nav-btn">👥 Customers</button>
@@ -299,7 +310,8 @@
         <!-- Saved Quotes Section -->
         <div id="saved-quotes-section" class="saved-quotes-container hidden">
             <div class="header">
-                <h1>My Saved Quotes</h1>
+                <img class="brand-logo" alt="Kitchen Wrap Masters">
+                <h1>Saved Quotes</h1>
                 <div class="header-actions">
                     <button id="nav-calculator-btn-5" class="nav-btn">🏠 Calculator</button>
                     <button id="nav-customers-btn-5" class="nav-btn">👥 Customers</button>

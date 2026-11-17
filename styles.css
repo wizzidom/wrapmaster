@@ -109,7 +109,7 @@ input[type="checkbox"] {
 
 .tab-btn.active {
     background: white;
-    color: #667eea;
+    color: #ff6a00;
     font-weight: bold;
 }
 
@@ -135,13 +135,13 @@ input[type="checkbox"] {
 
 .auth-form input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .auth-form button {
     width: 100%;
     padding: 15px;
-    background: #667eea;
+    background: #ff6a00;
     color: white;
     border: none;
     border-radius: 8px;
@@ -151,7 +151,7 @@ input[type="checkbox"] {
 }
 
 .auth-form button:hover {
-    background: #5a6fd8;
+    background: #e05a00;
 }
 
 /* Quote Calculator Styles */
@@ -170,7 +170,7 @@ input[type="checkbox"] {
 }
 
 .header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #ffffff;
     color: white;
     padding: 20px 40px;
     display: flex;
@@ -247,11 +247,11 @@ input[type="checkbox"] {
 
 .mode-btn:hover {
     background: rgba(102, 126, 234, 0.1);
-    color: #667eea;
+    color: #ff6a00;
 }
 
 .mode-btn.active {
-    background: #667eea;
+    background: #ff6a00;
     color: white;
     font-weight: bold;
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
@@ -280,7 +280,7 @@ input[type="checkbox"] {
 
 .step input[type="number"]:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .step h3 {
@@ -318,7 +318,7 @@ input[type="checkbox"] {
 }
 
 .material-option:hover {
-    border-color: #667eea;
+    border-color: #ff6a00;
     background: #f8f9ff;
 }
 
@@ -384,7 +384,7 @@ input[type="checkbox"] {
 
 .quote-name-input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .save-quote-btn {
@@ -679,7 +679,7 @@ input[type="checkbox"] {
 }
 
 .saved-quote-item:hover {
-    border-color: #667eea;
+    border-color: #ff6a00;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
@@ -744,10 +744,10 @@ input[type="checkbox"] {
 
 .status-change-select {
     padding: 8px 12px;
-    border: 2px solid #667eea;
+    border: 2px solid #ff6a00;
     border-radius: 5px;
     background: white;
-    color: #667eea;
+    color: #ff6a00;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -755,7 +755,7 @@ input[type="checkbox"] {
 }
 
 .status-change-select:hover {
-    background: #667eea;
+    background: #ff6a00;
     color: white;
 }
 
@@ -940,7 +940,7 @@ input[type="checkbox"] {
 
 .modal-form input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .modal-actions {
@@ -1099,7 +1099,7 @@ input[type="checkbox"] {
 .search-input:focus,
 .filter-select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .clear-filters-btn {
@@ -1597,7 +1597,7 @@ sktop-specific enhancements */
 }
 
 .customer-item:hover {
-    border-color: #667eea;
+    border-color: #ff6a00;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
@@ -1691,13 +1691,13 @@ sktop-specific enhancements */
 
 .customer-select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .manage-customers-btn,
 .customers-btn {
     padding: 12px 20px;
-    background: #667eea;
+    background: #ff6a00;
     color: white;
     border: none;
     border-radius: 8px;
@@ -1709,7 +1709,7 @@ sktop-specific enhancements */
 
 .manage-customers-btn:hover,
 .customers-btn:hover {
-    background: #5a6fd8;
+    background: #e05a00;
 }
 
 .customer-info {
@@ -1806,7 +1806,7 @@ sktop-specific enhancements */
 
 .quote-status-select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .status-badge {
@@ -1913,7 +1913,7 @@ sktop-specific enhancements */
 .modal-form input:focus,
 .modal-form textarea:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .modal-actions {
@@ -2096,12 +2096,12 @@ sktop-specific enhancements */
 
 .calendar-month-select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .calendar-btn {
     padding: 12px 20px;
-    background: #667eea;
+    background: #ff6a00;
     color: white;
     border: none;
     border-radius: 8px;
@@ -2112,7 +2112,7 @@ sktop-specific enhancements */
 }
 
 .calendar-btn:hover {
-    background: #5a6fd8;
+    background: #e05a00;
 }
 
 .scheduled-quotes-list {
@@ -2136,7 +2136,7 @@ sktop-specific enhancements */
     justify-content: space-between;
     align-items: center;
     padding: 15px 20px;
-    background: #667eea;
+    background: #ff6a00;
     color: white;
 }
 
@@ -2225,7 +2225,7 @@ sktop-specific enhancements */
 
 .scheduled-date-input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .quote-actions-row {
@@ -2301,7 +2301,7 @@ sktop-specific enhancements */
 .payment-actions input:focus,
 .payment-actions select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #ff6a00;
 }
 
 .payment-badge {
@@ -2408,7 +2408,7 @@ sktop-specific enhancements */
 }
 
 .stat-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ff6a00 0%, #e05a00 100%);
     color: white;
     padding: 25px;
     border-radius: 10px;
@@ -2456,7 +2456,7 @@ sktop-specific enhancements */
 }
 
 .history-item:hover {
-    border-color: #667eea;
+    border-color: #ff6a00;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
@@ -2718,7 +2718,7 @@ sktop-specific enhancements */
 }
 
 .modal-photo-item img:hover {
-    border-color: #667eea;
+    border-color: #ff6a00;
     transform: scale(1.05);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
@@ -2740,7 +2740,7 @@ sktop-specific enhancements */
 
 .view-details-btn {
     padding: 8px 16px;
-    background: #667eea;
+    background: #ff6a00;
     color: white;
     border: none;
     border-radius: 5px;
@@ -2750,7 +2750,7 @@ sktop-specific enhancements */
 }
 
 .view-details-btn:hover {
-    background: #5a6fd8;
+    background: #e05a00;
 }
 
 /* Responsive for quote details modal */
@@ -2812,9 +2812,9 @@ sktop-specific enhancements */
 #service-lines { margin-bottom: 12px; }
 #service-lines:empty { display: none; }
 .service-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.service-btn { padding: 12px 8px; min-height: 44px; background: #fff; color: #667eea; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-.service-btn:hover { background: #667eea; color: #fff; }
-.dialog-label a { color: #667eea; }
+.service-btn { padding: 12px 8px; min-height: 44px; background: #fff; color: #ff6a00; border: 2px solid #ff6a00; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.service-btn:hover { background: #ff6a00; color: #fff; }
+.dialog-label a { color: #ff6a00; }
 @media (min-width: 700px) { .service-buttons { grid-template-columns: repeat(3, 1fr); } }
 
 /* Job badges, calendar grid */
@@ -2836,8 +2836,8 @@ sktop-specific enhancements */
 
 /* Board view */
 .view-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
-.view-toggle button { padding: 8px 16px; min-height: 40px; border: 2px solid #667eea; background: #fff; color: #667eea; border-radius: 8px; font-weight: 600; cursor: pointer; }
-.view-toggle button.active { background: #667eea; color: #fff; }
+.view-toggle button { padding: 8px 16px; min-height: 40px; border: 2px solid #ff6a00; background: #fff; color: #ff6a00; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.view-toggle button.active { background: #ff6a00; color: #fff; }
 .board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
 .board-col { flex: 0 0 250px; background: #f1f3f5; border-radius: 10px; padding: 8px; }
 .board-col-head { display: flex; justify-content: space-between; font-weight: bold; font-size: 13px; padding: 4px 6px 8px; }
@@ -2860,3 +2860,37 @@ sktop-specific enhancements */
 .dash-note { font-size: 12px; color: #666; margin: -12px 0 16px; }
 
 a.svc-chip { text-decoration: none; }
+
+
+/* ===== Brand theme: Kitchen Wrap Masters (orange and charcoal, from the logo) ===== */
+:root { --brand-orange: #ff6a00; --brand-dark: #1a1f1f; }
+body { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #f4f4f2; color: #222; }
+.header { background: #fff; color: var(--brand-dark); border-bottom: 4px solid var(--brand-orange); position: relative; flex-wrap: wrap; justify-content: flex-start; gap: 10px 18px; padding: 14px 40px; }
+.header::after { content: ''; position: absolute; left: 0; bottom: -4px; width: 60%; height: 4px; background: var(--brand-dark); }
+.brand-logo { height: 52px; width: auto; display: block; }
+.brand-logo-lg { height: 88px; margin: 28px auto 4px; }
+.auth-tagline { text-align: center; letter-spacing: 3px; font-size: 11px; font-weight: 700; color: var(--brand-dark); margin-bottom: 8px; }
+.header h1 { font-size: 17px; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; color: var(--brand-dark); margin-right: auto; }
+.brand-logo + h1 { padding-left: 18px; border-left: 2px solid #e1e5e9; }
+.header-actions { flex-wrap: wrap; gap: 8px; }
+.logout-btn, .saved-quotes-btn, .back-btn, .nav-btn { background: #fff; color: var(--brand-dark); border: 1.5px solid #d9dbd8; padding: 8px 14px; font-weight: 600; }
+.logout-btn:hover, .saved-quotes-btn:hover, .back-btn:hover, .nav-btn:hover { background: var(--brand-dark); color: #fff; border-color: var(--brand-dark); }
+.logout-btn { background: var(--brand-dark); color: #fff; border-color: var(--brand-dark); }
+.logout-btn:hover { background: var(--brand-orange); border-color: var(--brand-orange); }
+@media (max-width: 700px) {
+    .header { padding: 12px 16px; }
+    .brand-logo { height: 40px; }
+    .header h1 { flex-basis: 100%; order: 3; padding-left: 0; border-left: none; margin: 0; font-size: 15px; }
+    .header-actions { order: 4; width: 100%; }
+}
+
+
+/* ===== Fonts (change these two lines to change the fonts everywhere) ===== */
+:root { --font-body: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif; --font-head: 'Barlow Condensed', 'Arial Narrow', Arial, sans-serif; }
+body { font-family: var(--font-body); }
+button, input, select, textarea { font-family: inherit; }
+h1, h2, h3, h4, .modal-title, .stat-value, .board-col-head { font-family: var(--font-head); }
+.header h1 { font-size: 24px; letter-spacing: 1.5px; }
+.modal-title { text-transform: uppercase; letter-spacing: 1px; font-size: 24px; }
+h3 { font-size: 20px; letter-spacing: 0.5px; }
+.stat-value { letter-spacing: 0.5px; }

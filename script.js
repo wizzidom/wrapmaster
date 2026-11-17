@@ -76,11 +76,17 @@ PRICING.appliances = [
 ];
 const SERVICES = {
     kitchen: { name: 'Kitchen cabinet wrapping' }, wardrobe: { name: 'Wardrobe wrapping' }, appliance: { name: 'Appliance wrapping' },
-    tinting: { name: 'Window tinting', rate: 750 }, frosting: { name: 'Window frosting', rate: 650 }, wallpaper: { name: 'Wallpaper', rate: 750 }
+    tinting: { name: 'Window tinting', rate: 750 }, frosting: { name: 'Window frosting', rate: 650 }, wallpaper: { name: 'Wallpaper', rate: 750 }, countertop: { name: 'Countertop wrapping' }
 };
 
+PRICING.countertopFinishes = [{ id: 'marble', name: 'Marble', price: 457.87 }, { id: 'plain', name: 'Plain colour', price: 150 }];
+PRICING.countertopInstall = 350;
+PRICING.finishes = { tinting: [], frosting: [], wallpaper: [] };
+BUSINESS.scopes.countertop = ['Cleaning and preparation of the countertop surface before wrapping', 'Wrapping of the countertop surface and visible edges', 'Trimming around sinks, hobs and fittings where necessary', 'Final cleaning and finishing to ensure a neat, professional result'];
+const slugId = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'item';
+
 const STAGE_LABELS = { accepted: 'Accepted', deposit_requested: 'Deposit requested', deposit_received: 'Deposit received', scheduled: 'Scheduled', in_progress: 'In progress', snagging: 'Snagging', awaiting_payment: 'Awaiting payment', complete: 'Complete' };
-const SERVICE_SHORT = { kitchen: 'Kitchen', wardrobe: 'Wardrobe', appliance: 'Appliance', tinting: 'Tinting', frosting: 'Frosting', wallpaper: 'Wallpaper' };
+const SERVICE_SHORT = { kitchen: 'Kitchen', wardrobe: 'Wardrobe', appliance: 'Appliance', tinting: 'Tinting', frosting: 'Frosting', wallpaper: 'Wallpaper', countertop: 'Countertop' };
 
 // User authentication and quote calculator functionality
 class VinylQuoteApp {
@@ -576,6 +582,7 @@ class VinylQuoteApp {
         const hasCab = doors > 0;
         if (!hasCab && !lines.length) { bad(this.calculatorMode === 'doors' ? 'Please enter a valid number of doors' : 'Please enter a valid square metres value'); return; }
         if (hasCab && !sel) { bad('Please select a material type'); return; }
+        if (hasCab && sel.value === '__custom' && !this.customMaterial) { bad('Enter the custom finish details'); return; }
         const ward = lines.filter(l => l.service_type === 'wardrobe'), wardSides = ward.reduce((s, l) => s + l.qty, 0), wardSqm = ward.reduce((s, l) => s + l.details.sqm, 0);
         const cabDays = Math.ceil((doors + wardSides) / PRICING.sidesPerDay);
         const autoDays = Math.max(1, cabDays + (lines.some(l => l.service_type !== 'wardrobe') ? 1 : 0)), daysRaw = parseInt(document.getElementById('days-input').value), projectDays = daysRaw > 0 ? daysRaw : autoDays;
@@ -588,7 +595,7 @@ class VinylQuoteApp {
         const customItemsTotal = this.customLineItems.reduce((s, x) => s + x.amount, 0);
         const linesTotal = lines.reduce((s, l) => s + l.line_total, 0);
         const totalCost = materialCost + installationFee + foodCost + transportCost + customItemsTotal + linesTotal;
-        this.displayQuoteResult({ doors, squareMetres, projectDays, materialName, materialRate, materialCost, installationFee, foodCost, transportCost, customItemsTotal, linesTotal, hasCab, totalCost, totalSides: doors + wardSides, totalSqm: squareMetres + wardSqm });
+        this.displayQuoteResult({ doors, squareMetres, projectDays, materialName, materialRate, materialCost, installationFee, foodCost, transportCost, customItemsTotal, linesTotal, hasCab, custom: hasCab && sel.value === '__custom', totalCost, totalSides: doors + wardSides, totalSqm: squareMetres + wardSqm });
     }
 
     bindServiceEvents() {
@@ -604,34 +611,59 @@ class VinylQuoteApp {
     }
 
     async addServiceLine(type) {
-        const S = SERVICES[type];
-        let line;
+        const S = SERVICES[type], round2 = x => Math.round(x * 100) / 100;
+        const saveField = { name: 'save', type: 'checks', label: '', options: ['Save to my list for next time'] };
+        let line, saveList = null;
+        const pick = (r, list, key) => r.pick === '__custom' ? { custom: true, name: (r.cname || '').trim(), val: parseFloat(r.cprice) } : (() => { const f = list.find(x => x.id === r.pick); return { custom: false, name: f.name, val: f[key] }; })();
         if (type === 'wardrobe') {
             const r = await this.ask({ title: 'Add wardrobe wrapping', fields: [
                 { name: 'mode', type: 'select', label: 'Measured in', options: [['doors', 'Doors / sides'], ['sqm', 'Square metres']] },
                 { name: 'amount', label: 'Amount', type: 'number', step: '0.01', min: 0, required: true },
-                { name: 'material', type: 'select', label: 'Material', options: PRICING.materials.map(m => [m.id, `${m.name} - R${m.rate}/m²`]) },
-                { name: 'colour', label: 'Colour / finish', required: true }], okText: 'Add' });
+                { name: 'pick', type: 'select', label: 'Material', options: PRICING.materials.map(m => [m.id, `${m.name} - R${m.rate}/m²`]).concat([['__custom', 'Custom finish...']]) },
+                { name: 'cname', label: 'Custom finish name (if Custom)' }, { name: 'cprice', label: 'Custom price per m² (if Custom)', type: 'number', step: '0.01', min: 0 },
+                { name: 'colour', label: 'Colour / finish', required: true }, saveField], okText: 'Add' });
             if (!r) return;
-            const mat = PRICING.materials.find(m => m.id === r.material), n = parseFloat(r.amount);
+            const mat = pick(r, PRICING.materials, 'rate'), n = parseFloat(r.amount);
+            if (mat.custom && (!mat.name || !(mat.val >= 0))) { this.showError('Enter the custom finish name and price'); return; }
             const doors = r.mode === 'doors' ? Math.round(n) : Math.ceil(n * PRICING.doorsPerSqm);
             if (!(doors > 0)) { this.showError('Enter a valid amount'); return; }
             const sqm = r.mode === 'doors' ? doors / PRICING.doorsPerSqm : n;
-            line = { service_type: type, description: S.name, colour: r.colour, qty: doors, unit: 'sides', unit_price: null, line_total: sqm * mat.rate + doors * PRICING.installPerSide, details: { sqm, material: mat.name, rate: mat.rate } };
+            line = { service_type: type, description: S.name, colour: r.colour, qty: doors, unit: 'sides', unit_price: null, line_total: sqm * mat.val + doors * PRICING.installPerSide, details: { sqm, material: mat.name, rate: mat.val, custom: mat.custom, finish_name: mat.custom ? mat.name : undefined } };
+            if (mat.custom && r.save.length) { this.addToList(PRICING.materials, mat.name, 'rate', mat.val); saveList = true; }
         } else if (type === 'appliance') {
             const r = await this.ask({ title: 'Add appliance', fields: [
-                { name: 'item', type: 'select', label: 'Appliance', options: PRICING.appliances.map(a => [a.id, `${a.name} - R${a.price}`]) },
+                { name: 'pick', type: 'select', label: 'Appliance', options: PRICING.appliances.map(a => [a.id, `${a.name} - R${a.price}`]).concat([['__custom', 'Custom item...']]) },
+                { name: 'cname', label: 'Custom item name (if Custom)' }, { name: 'cprice', label: 'Custom price per item (if Custom)', type: 'number', step: '0.01', min: 0 },
                 { name: 'qty', label: 'Quantity', type: 'number', value: '1', min: 1, step: '1', required: true },
-                { name: 'colour', label: 'Colour / finish', required: true }], okText: 'Add' });
+                { name: 'colour', label: 'Colour / finish', required: true }, saveField], okText: 'Add' });
             if (!r) return;
-            const a = PRICING.appliances.find(x => x.id === r.item), qty = Math.max(1, parseInt(r.qty) || 1);
-            line = { service_type: type, description: a.name, colour: r.colour, qty, unit: 'each', unit_price: a.price, line_total: a.price * qty, details: { item: a.id } };
+            const a = pick(r, PRICING.appliances, 'price'), qty = Math.max(1, parseInt(r.qty) || 1);
+            if (a.custom && (!a.name || !(a.val >= 0))) { this.showError('Enter the custom item name and price'); return; }
+            line = { service_type: type, description: a.name, colour: r.colour, qty, unit: 'each', unit_price: a.val, line_total: a.val * qty, details: { custom: a.custom } };
+            if (a.custom && r.save.length) { this.addToList(PRICING.appliances, a.name, 'price', a.val); saveList = true; }
+        } else if (type === 'countertop') {
+            const r = await this.ask({ title: 'Add countertop wrapping', message: `Installation is R${PRICING.countertopInstall} per m² on the same total. Enter the final total m².`, fields: [
+                { name: 'pick', type: 'select', label: 'Finish', options: PRICING.countertopFinishes.map(f => [f.id, `${f.name} - R${f.price}/m²`]).concat([['__custom', 'Custom finish...']]) },
+                { name: 'cname', label: 'Custom finish name (if Custom)' }, { name: 'cprice', label: 'Custom material price per m² (if Custom)', type: 'number', step: '0.01', min: 0 },
+                { name: 'area', label: 'Total m² (final, including excess)', type: 'number', step: '0.01', min: 0, required: true },
+                { name: 'detail', label: 'Colour / pattern name (optional)' }, saveField], okText: 'Add' });
+            if (!r) return;
+            const f = pick(r, PRICING.countertopFinishes, 'price'), area = parseFloat(r.area);
+            if (f.custom && (!f.name || !(f.val >= 0))) { this.showError('Enter the custom finish name and price'); return; }
+            if (!(area > 0)) { this.showError('Enter the total m²'); return; }
+            line = { service_type: type, description: S.name, colour: [f.name, (r.detail || '').trim()].filter(Boolean).join(' - '), qty: area, unit: 'm²', unit_price: f.val + PRICING.countertopInstall, line_total: round2(area * (f.val + PRICING.countertopInstall)), details: { rate: f.val, install: PRICING.countertopInstall, finish: f.name, custom: f.custom } };
+            if (f.custom && r.save.length) { this.addToList(PRICING.countertopFinishes, f.name, 'price', f.val); saveList = true; }
         } else {
-            const r = await this.ask({ title: 'Add ' + S.name.toLowerCase(), message: `R${S.rate} per m². Enter the total area, or list each window/wall as width x height in metres, one per line (for example 1.2 x 1.5). Sizes override the total area.`, fields: [
+            const list = [{ id: 'standard', name: 'Standard', price: S.rate }, ...PRICING.finishes[type]];
+            const r = await this.ask({ title: 'Add ' + S.name.toLowerCase(), message: 'Enter the total area, or list each window/wall as width x height in metres, one per line (for example 1.2 x 1.5). Sizes override the total area.', fields: [
+                { name: 'pick', type: 'select', label: 'Finish', options: list.map(f => [f.id, `${f.name} - R${f.price}/m²`]).concat([['__custom', 'Custom finish...']]) },
+                { name: 'cname', label: 'Custom finish name (if Custom)' }, { name: 'cprice', label: 'Custom price per m² (if Custom)', type: 'number', step: '0.01', min: 0 },
                 { name: 'area', label: 'Total area (m²)', type: 'number', step: '0.01', min: 0 },
                 { name: 'sizes', label: 'Or sizes (one per line)', multiline: true },
-                { name: 'colour', label: 'Colour / film / pattern (optional)' }], okText: 'Add' });
+                { name: 'detail', label: 'Colour / film / pattern (optional)' }, saveField], okText: 'Add' });
             if (!r) return;
+            const f = pick(r, list, 'price');
+            if (f.custom && (!f.name || !(f.val >= 0))) { this.showError('Enter the custom finish name and price'); return; }
             let area = parseFloat(r.area) || 0;
             const sizes = [];
             for (const row of r.sizes.split('\n').map(s => s.trim()).filter(Boolean)) {
@@ -641,12 +673,15 @@ class VinylQuoteApp {
             }
             if (sizes.length) area = sizes.reduce((s, [w, hh]) => s + w * hh, 0);
             if (!(area > 0)) { this.showError('Enter an area or at least one size'); return; }
-            area = Math.round(area * 100) / 100;
-            line = { service_type: type, description: S.name, colour: r.colour || null, qty: area, unit: 'm²', unit_price: S.rate, line_total: Math.round(area * S.rate * 100) / 100, details: { sizes } };
+            area = round2(area);
+            const shown = (!f.custom && list.find(x => x.id === r.pick).id === 'standard') ? (r.detail || '').trim() : [f.name, (r.detail || '').trim()].filter(Boolean).join(' - ');
+            line = { service_type: type, description: S.name, colour: shown || null, qty: area, unit: 'm²', unit_price: f.val, line_total: round2(area * f.val), details: { sizes, rate: f.val, custom: f.custom } };
+            if (f.custom && r.save.length) { this.addToList(PRICING.finishes[type], f.name, 'price', f.val); saveList = true; }
         }
         this.serviceLines.push(line);
         this.renderServiceLines();
         this.onLinesChanged();
+        if (saveList) await this.persistConfig();
     }
 
     removeServiceLine(i) { this.serviceLines.splice(i, 1); this.renderServiceLines(); this.onLinesChanged(); }
@@ -663,6 +698,7 @@ class VinylQuoteApp {
 
     getMaterialName(value) {
         const m = PRICING.materials.find(x => x.id === value);
+        if (value === '__custom') return this.customMaterial ? this.customMaterial.name : 'Custom finish';
         return m ? m.name : value;
     }
 
@@ -775,7 +811,7 @@ class VinylQuoteApp {
 
             // Save service lines (cabinet part + other services)
             const q = this.currentQuote, kind = 'kitchen', rows = [];
-            if (q.hasCab) rows.push({ service_type: kind, description: SERVICES[kind].name, colour: document.getElementById('cabinet-colour').value.trim() || null, qty: q.doors, unit: 'sides', unit_price: null, line_total: q.materialCost + q.installationFee, details: { sqm: q.squareMetres, material: q.materialName, rate: q.materialRate } });
+            if (q.hasCab) rows.push({ service_type: kind, description: SERVICES[kind].name, colour: document.getElementById('cabinet-colour').value.trim() || null, qty: q.doors, unit: 'sides', unit_price: null, line_total: q.materialCost + q.installationFee, details: { sqm: q.squareMetres, material: q.materialName, rate: q.materialRate, custom: !!q.custom, finish_name: q.custom ? q.materialName : undefined } });
             this.serviceLines.forEach(l => rows.push(l));
             if (rows.length) {
                 const { error: lerr } = await supabase.from('quote_lines').insert(rows.map((r, i) => ({ ...r, quote_id: quoteId, position: i })));
@@ -1972,10 +2008,12 @@ class VinylQuoteApp {
 
     renderMaterials() {
         const box = document.querySelector('.material-options'), cur = (document.querySelector('input[name="material"]:checked') || {}).value;
-        box.innerHTML = PRICING.materials.map(m => `<label class="material-option"><input type="radio" name="material" value="${esc(m.id)}" data-rate="${m.rate}"><span>${esc(m.name)} - R${m.rate} per m²</span></label>`).join('');
+        box.innerHTML = PRICING.materials.map(m => `<label class="material-option"><input type="radio" name="material" value="${esc(m.id)}" data-rate="${m.rate}"><span>${esc(m.name)} - R${m.rate} per m²</span></label>`).join('') + '<label class="material-option"><input type="radio" name="material" value="__custom" data-rate="0"><span id="custom-material-label">Custom finish...</span></label>';
         box.onchange = () => this.handleMaterialSelection();
+        box.onclick = e => { if (e.target.value === '__custom') this.askCustomMaterial(); };
         const r = cur && [...box.querySelectorAll('input')].find(x => x.value === cur);
         if (r) r.checked = true;
+        if (this.customMaterial) this.setCustomMaterial(this.customMaterial);
         const f = document.getElementById('material-filter');
         while (f.options.length > 1) f.remove(1);
         f.insertAdjacentHTML('beforeend', PRICING.materials.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join(''));
@@ -2146,6 +2184,10 @@ class VinylQuoteApp {
         if (Array.isArray(c.appliances) && c.appliances.length) PRICING.appliances = c.appliances.filter(a => a && a.id && a.name && typeof a.price === 'number');
         Object.entries(c.scopes || {}).forEach(([k, v]) => { if (BUSINESS.scopes[k] && Array.isArray(v)) BUSINESS.scopes[k] = v.filter(s => typeof s === 'string' && s.trim()); });
         Object.entries(c.notes || {}).forEach(([k, v]) => { if (typeof v === 'string') BUSINESS.notes[k] = v; });
+        const okList = (a, k) => Array.isArray(a) ? a.filter(x => x && x.id && x.name && typeof x[k] === 'number') : null;
+        if (okList(c.countertopFinishes, 'price')) PRICING.countertopFinishes = okList(c.countertopFinishes, 'price');
+        set(PRICING, 'countertopInstall', 0);
+        ['tinting', 'frosting', 'wallpaper'].forEach(k => { if (c.finishes && okList(c.finishes[k], 'price')) PRICING.finishes[k] = okList(c.finishes[k], 'price'); });
         this.renderMaterials();
     }
 
@@ -2222,7 +2264,7 @@ class VinylQuoteApp {
     saveDraft() {
         if (!this.currentUser || this.editingId) return;
         const $ = id => document.getElementById(id), m = document.querySelector('input[name="material"]:checked');
-        const d = { mode: this.calculatorMode, doors: $('doors-input').value, sqm: $('sqm-input').value, material: m ? m.value : '', colour: $('cabinet-colour').value, transport: $('transport-input').value, food: $('food-input').value, days: $('days-input').value, lines: this.serviceLines, items: this.customLineItems, name: $('quote-name-input').value, status: $('quote-status-select').value, date: $('scheduled-date-input').value, customer: $('customer-select').value, deposit: $('deposit-required').checked, touched: this.depositTouched };
+        const d = { mode: this.calculatorMode, doors: $('doors-input').value, sqm: $('sqm-input').value, material: m ? m.value : '', colour: $('cabinet-colour').value, transport: $('transport-input').value, food: $('food-input').value, days: $('days-input').value, lines: this.serviceLines, items: this.customLineItems, name: $('quote-name-input').value, status: $('quote-status-select').value, date: $('scheduled-date-input').value, customer: $('customer-select').value, deposit: $('deposit-required').checked, touched: this.depositTouched, custom: this.customMaterial || null };
         try {
             if (!d.doors && !d.sqm && !d.lines.length && !d.items.length && !d.name) localStorage.removeItem(this.draftKey());
             else localStorage.setItem(this.draftKey(), JSON.stringify(d));
@@ -2233,6 +2275,7 @@ class VinylQuoteApp {
         const $ = id => document.getElementById(id);
         if (d.mode === 'sqm') this.switchToSqmMode(); else this.switchToDoorsMode();
         $('doors-input').value = d.doors; $('sqm-input').value = d.sqm;
+        if (d.custom) this.setCustomMaterial(d.custom);
         const r = document.querySelector(`input[name="material"][value="${d.material}"]`); if (r) r.checked = true;
         $('cabinet-colour').value = d.colour; $('transport-input').value = d.transport; $('food-input').value = d.food; $('days-input').value = d.days;
         $('quote-name-input').value = d.name; $('quote-status-select').value = d.status; $('scheduled-date-input').value = d.date;
@@ -2366,7 +2409,7 @@ class VinylQuoteApp {
         const autoDays = Math.max(1, Math.ceil((kSides + wSides) / PRICING.sidesPerDay) + (rest.some(x => x.service_type !== 'wardrobe') ? 1 : 0));
         const matName = (kit && kit.details && kit.details.material) || quote.material_name;
         this.applyDraft({
-            mode: 'doors', doors: kSides ? String(kSides) : '', sqm: '', material: (PRICING.materials.find(m => m.name === matName) || {}).id || '',
+            mode: 'doors', doors: kSides ? String(kSides) : '', sqm: '', material: (PRICING.materials.find(m => m.name === matName) || {}).id || (kit && kit.details && kit.details.custom ? '__custom' : ''), custom: kit && kit.details && kit.details.custom ? { name: matName, rate: num(kit.details.rate) } : null,
             colour: (kit && kit.colour) || '', transport: num(quote.transport_cost) ? String(num(quote.transport_cost)) : '',
             food: Math.abs(num(quote.food_cost) - autoFood) < 0.005 ? '' : String(num(quote.food_cost)),
             days: num(quote.project_days) === autoDays ? '' : String(num(quote.project_days)),
@@ -2388,7 +2431,7 @@ class VinylQuoteApp {
         const oldCols = Object.fromEntries(keys.map(k => [k, old[k]]));
         const [ol, oi] = await Promise.all([supabase.from('quote_lines').select('*').eq('quote_id', id), supabase.from('custom_line_items').select('*').eq('quote_id', id)]);
         const rows = [];
-        if (q.hasCab) rows.push({ service_type: 'kitchen', description: SERVICES.kitchen.name, colour: document.getElementById('cabinet-colour').value.trim() || null, qty: q.doors, unit: 'sides', unit_price: null, line_total: q.materialCost + q.installationFee, details: { sqm: q.squareMetres, material: q.materialName, rate: q.materialRate } });
+        if (q.hasCab) rows.push({ service_type: 'kitchen', description: SERVICES.kitchen.name, colour: document.getElementById('cabinet-colour').value.trim() || null, qty: q.doors, unit: 'sides', unit_price: null, line_total: q.materialCost + q.installationFee, details: { sqm: q.squareMetres, material: q.materialName, rate: q.materialRate, custom: !!q.custom, finish_name: q.custom ? q.materialName : undefined } });
         this.serviceLines.forEach(x => rows.push(x));
         const newCols = { customer_id: document.getElementById('customer-select').value || null, doors: q.totalSides, square_metres: q.totalSqm, project_days: q.projectDays, material_name: q.materialName, material_rate: q.materialRate, material_cost: q.materialCost, installation_fee: q.installationFee, food_cost: q.foodCost, transport_cost: q.transportCost, custom_items_total: q.customItemsTotal || 0, total_cost: q.totalCost, quote_name: document.getElementById('quote-name-input').value.trim() || old.quote_name, deposit_required: document.getElementById('deposit-required').checked };
         const chk = r => { if (r.error) throw r.error; };
@@ -2524,9 +2567,11 @@ class VinylQuoteApp {
             <h4>Rates and rules</h4>
             ${num('installPerSide', 'Installation per side (R)', P.installPerSide)}${num('foodPerDay', 'Food per day (R)', P.foodPerDay)}${num('sidesPerDay', 'Sides per day (team capacity)', P.sidesPerDay, '1')}${num('doorsPerSqm', 'Doors per m²', P.doorsPerSqm)}
             ${num('depositPct', 'Deposit (%)', P.depositPct, '1')}${num('validityDays', 'Quote valid for (days)', B.validityDays, '1')}${num('followUpDays', 'Follow up pending quotes after (days)', B.followUpDays, '1')}
-            ${num('tinting', 'Window tinting (R per m²)', S.tinting.rate)}${num('frosting', 'Window frosting (R per m²)', S.frosting.rate)}${num('wallpaper', 'Wallpaper (R per m²)', S.wallpaper.rate)}
+            ${num('tinting', 'Window tinting (R per m²)', S.tinting.rate)}${num('frosting', 'Window frosting (R per m²)', S.frosting.rate)}${num('wallpaper', 'Wallpaper (R per m²)', S.wallpaper.rate)}${num('countertopInstall', 'Countertop installation (R per m²)', P.countertopInstall)}
             <h4>Materials (internal; one per line as Name | price per m²)</h4>${area('materials', '', P.materials.map(m => `${m.name} | ${m.rate}`).join('\n'), 6)}
             <h4>Appliances (one per line as Name | price)</h4>${area('appliances', '', P.appliances.map(a => `${a.name} | ${a.price}`).join('\n'), 7)}
+            <h4>Countertop finishes (Name | price per m²)</h4>${area('ctfinishes', '', P.countertopFinishes.map(f => `${f.name} | ${f.price}`).join('\n'), 4)}
+            <h4>Extra finishes for tinting, frosting and wallpaper (Name | price per m²)</h4>${['tinting', 'frosting', 'wallpaper'].map(k => area('fin-' + k, SERVICES[k].name, P.finishes[k].map(f => `${f.name} | ${f.price}`).join('\n'), 3)).join('')}
             <h4>Scope of work (one item per line)</h4>${kinds.map(k => area('scope-' + k, SERVICES[k].name, B.scopes[k].join('\n'))).join('')}
             <h4>"Please note" text (empty means none)</h4>${kinds.map(k => area('note-' + k, SERVICES[k].name, B.notes[k] || '', 3)).join('')}
             <div class="modal-actions"><button type="submit" class="modal-save-btn">Save settings</button><button type="button" class="modal-cancel-btn" data-act="bank">Bank details</button><button type="button" class="modal-cancel-btn" data-act="close">Close</button></div></form></div>`;
@@ -2558,7 +2603,9 @@ class VinylQuoteApp {
                     installPerSide: n('installPerSide'), foodPerDay: n('foodPerDay'), sidesPerDay: Math.max(1, n('sidesPerDay')), doorsPerSqm: Math.max(0.1, n('doorsPerSqm')),
                     depositPct: Math.min(100, n('depositPct')), validityDays: Math.max(1, Math.round(n('validityDays'))), followUpDays: Math.max(1, Math.round(n('followUpDays'))),
                     rates: { tinting: n('tinting'), frosting: n('frosting'), wallpaper: n('wallpaper') },
-                    materials, appliances: withIds(parse('appliances', 'Appliances'), P.appliances, 'price'), scopes: {}, notes: {}
+                    materials, appliances: withIds(parse('appliances', 'Appliances'), P.appliances, 'price'),
+                    countertopFinishes: (used.clear(), withIds(parse('ctfinishes', 'Countertop finishes'), P.countertopFinishes, 'price')), countertopInstall: n('countertopInstall'),
+                    finishes: Object.fromEntries(['tinting', 'frosting', 'wallpaper'].map(k => (used.clear(), [k, withIds(parse('fin-' + k, 'Extra finishes'), P.finishes[k], 'price')]))), scopes: {}, notes: {}
                 };
                 kinds.forEach(k => { cfg.scopes[k] = $('scope-' + k).value.split('\n').map(s => s.trim()).filter(Boolean); cfg.notes[k] = $('note-' + k).value.trim(); });
                 const { error } = await supabase.from('business_settings').upsert({ owner_id: this.currentUser.id, config: cfg, updated_at: new Date().toISOString() });
@@ -2624,6 +2671,45 @@ class VinylQuoteApp {
         };
     }
 
+    addToList(list, name, key, val) {
+        let id = slugId(name);
+        while (list.some(x => x.id === id)) id += '_';
+        list.push({ id, name, [key]: val });
+    }
+
+    currentConfig() {
+        return { installPerSide: PRICING.installPerSide, foodPerDay: PRICING.foodPerDay, sidesPerDay: PRICING.sidesPerDay, doorsPerSqm: PRICING.doorsPerSqm, depositPct: PRICING.depositPct,
+            validityDays: BUSINESS.validityDays, followUpDays: BUSINESS.followUpDays, rates: { tinting: SERVICES.tinting.rate, frosting: SERVICES.frosting.rate, wallpaper: SERVICES.wallpaper.rate },
+            materials: PRICING.materials, appliances: PRICING.appliances, countertopFinishes: PRICING.countertopFinishes, countertopInstall: PRICING.countertopInstall, finishes: PRICING.finishes,
+            scopes: BUSINESS.scopes, notes: BUSINESS.notes };
+    }
+
+    async persistConfig() {
+        const { error } = await supabase.from('business_settings').upsert({ owner_id: this.currentUser.id, config: this.currentConfig(), updated_at: new Date().toISOString() });
+        if (error) this.showError('Could not save to your list: ' + error.message); else this.showSuccess('Saved to your list');
+    }
+
+    setCustomMaterial(c) {
+        this.customMaterial = c;
+        const r = document.querySelector('input[name="material"][value="__custom"]'), l = document.getElementById('custom-material-label');
+        if (r) r.dataset.rate = c.rate;
+        if (l) l.textContent = `Custom: ${c.name} - R${c.rate} per m²`;
+    }
+
+    async askCustomMaterial() {
+        const cur = this.customMaterial || {};
+        const r = await this.ask({ title: 'Custom finish', message: 'The finish name is shown to the customer on the quote.', fields: [
+            { name: 'name', label: 'Finish name', value: cur.name || '', required: true },
+            { name: 'rate', label: 'Material price per m² (R)', type: 'number', step: '0.01', min: 0, value: cur.rate != null ? String(cur.rate) : '', required: true },
+            { name: 'save', type: 'checks', label: '', options: ['Save to my list for next time'] }], okText: 'Use this finish' });
+        if (!r) { if (!this.customMaterial) { const x = document.querySelector('input[name="material"]:checked'); if (x && x.value === '__custom') { x.checked = false; this.handleMaterialSelection(); } } return; }
+        const c = { name: r.name, rate: parseFloat(r.rate) || 0 };
+        this.setCustomMaterial(c);
+        if (r.save.length) { this.addToList(PRICING.materials, c.name, 'rate', c.rate); this.renderMaterials(); this.setCustomMaterial(c); await this.persistConfig(); }
+        this.handleMaterialSelection();
+        this.recalcIfShown();
+    }
+
     toast(message, type) {
         this.clearMessages();
         let root = document.getElementById('toast-root');
@@ -2651,7 +2737,7 @@ class VinylQuoteApp {
             ov.setAttribute('aria-modal', 'true');
             const rows = fields.map((f, i) => {
                 const v = esc(f.value ?? '');
-                if (f.type === 'checks') return `<div class="dialog-label">${esc(f.label)} <a href="#" data-all="${i}">Select all</a><a href="#" data-none="${i}">Select none</a></div><div class="dlg-checks" id="dlg-${i}">${f.options.map((o, k) => `<label class="dlg-check"><input type="checkbox" value="${k}"${(f.checked || []).includes(o) ? ' checked' : ''}> ${esc(o)}</label>`).join('')}</div>`;
+                if (f.type === 'checks') return `<div class="dialog-label">${esc(f.label)} ${f.options.length > 1 ? `<a href="#" data-all="${i}">Select all</a><a href="#" data-none="${i}">Select none</a>` : ''}</div><div class="dlg-checks" id="dlg-${i}">${f.options.map((o, k) => `<label class="dlg-check"><input type="checkbox" value="${k}"${(f.checked || []).includes(o) ? ' checked' : ''}> ${esc(o)}</label>`).join('')}</div>`;
                 const input = f.type === 'select' ? `<select id="dlg-${i}">${f.options.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join('')}</select>` : f.multiline
                     ? `<textarea id="dlg-${i}" rows="3">${v}</textarea>`
                     : `<input id="dlg-${i}" type="${f.type || 'text'}" ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} value="${v}">`;
@@ -2910,8 +2996,8 @@ class VinylQuoteApp {
             const { data: qd } = await supabase.from('quote_lines').select('*').eq('quote_id', quote.id).order('position');
             const qLines = qd || [], rest = total - extra - qLines.reduce((s, l) => s + num(l.line_total), 0);
             const types = qLines.length ? [...new Set(qLines.map(l => l.service_type))] : ['kitchen'];
-            const perUnit = l => ['appliance', 'tinting', 'frosting', 'wallpaper'].includes(l.service_type);
-            let rows = qLines.length ? qLines.map(l => ({ t: l.description, d: l.colour || c.colour || '', q: perUnit(l) ? (l.service_type === 'appliance' ? String(num(l.qty)) : num(l.qty) + ' m²') : '1', n: perUnit(l) ? (num(l.qty) || 1) : 1, a: num(l.line_total) })) : [{ t: 'Kitchen cabinet wrapping', d: finish, q: '1', n: 1, a: total - extra }];
+            const perUnit = l => l.service_type === 'appliance';
+            let rows = qLines.length ? qLines.map(l => ({ t: l.description, d: [(l.details && l.details.custom && ['kitchen', 'wardrobe'].includes(l.service_type)) ? l.details.finish_name : '', l.colour || c.colour || ''].filter(Boolean).join(' - '), q: perUnit(l) ? String(num(l.qty)) : '1', n: perUnit(l) ? (num(l.qty) || 1) : 1, a: num(l.line_total) })) : [{ t: 'Kitchen cabinet wrapping', d: finish, q: '1', n: 1, a: total - extra }];
             if (qLines.length && rest > 0.005) {
                 // transport / call-out is never shown: it is loaded into the line prices
                 const k = qLines.findIndex(l => ['kitchen', 'wardrobe'].includes(l.service_type));
