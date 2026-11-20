@@ -617,17 +617,17 @@ class VinylQuoteApp {
         const pick = (r, list, key) => r.pick === '__custom' ? { custom: true, name: (r.cname || '').trim(), val: parseFloat(r.cprice) } : (() => { const f = list.find(x => x.id === r.pick); return { custom: false, name: f.name, val: f[key] }; })();
         if (type === 'wardrobe') {
             const r = await this.ask({ title: 'Add wardrobe wrapping', fields: [
-                { name: 'mode', type: 'select', label: 'Measured in', options: [['doors', 'Doors / sides'], ['sqm', 'Square metres']] },
-                { name: 'amount', label: 'Amount', type: 'number', step: '0.01', min: 0, required: true },
+                { name: 'doors', label: 'Number of doors / sides', type: 'number', step: '1', min: 0 },
+                { name: 'sqm', label: 'Or square metres (only if you are not counting doors)', type: 'number', step: '0.01', min: 0 },
                 { name: 'pick', type: 'select', label: 'Material', options: PRICING.materials.map(m => [m.id, `${m.name} - R${m.rate}/m²`]).concat([['__custom', 'Custom finish...']]) },
                 { name: 'cname', label: 'Custom finish name (if Custom)' }, { name: 'cprice', label: 'Custom price per m² (if Custom)', type: 'number', step: '0.01', min: 0 },
                 { name: 'colour', label: 'Colour / finish', required: true }, saveField], okText: 'Add' });
             if (!r) return;
-            const mat = pick(r, PRICING.materials, 'rate'), n = parseFloat(r.amount);
+            const mat = pick(r, PRICING.materials, 'rate'), d0 = parseInt(r.doors) || 0, sq0 = parseFloat(r.sqm) || 0;
             if (mat.custom && (!mat.name || !(mat.val >= 0))) { this.showError('Enter the custom finish name and price'); return; }
-            const doors = r.mode === 'doors' ? Math.round(n) : Math.ceil(n * PRICING.doorsPerSqm);
-            if (!(doors > 0)) { this.showError('Enter a valid amount'); return; }
-            const sqm = r.mode === 'doors' ? doors / PRICING.doorsPerSqm : n;
+            const doors = d0 || Math.ceil(sq0 * PRICING.doorsPerSqm);
+            if (!(doors > 0)) { this.showError('Enter the number of doors / sides'); return; }
+            const sqm = d0 ? d0 / PRICING.doorsPerSqm : sq0;
             line = { service_type: type, description: S.name, colour: r.colour, qty: doors, unit: 'sides', unit_price: null, line_total: sqm * mat.val + doors * PRICING.installPerSide, details: { sqm, material: mat.name, rate: mat.val, custom: mat.custom, finish_name: mat.custom ? mat.name : undefined } };
             if (mat.custom && r.save.length) { this.addToList(PRICING.materials, mat.name, 'rate', mat.val); saveList = true; }
         } else if (type === 'appliance') {
@@ -1558,12 +1558,16 @@ class VinylQuoteApp {
     async exportInvoicePDF(quoteId) {
         const quote = this.savedQuotes.find(q => q.id === quoteId);
         if (!quote) { this.showError('Quote not found'); return; }
-        let c = this.customers.find(x => x.id === quote.customer_id);
-        if (!c && quote.customer_id) {
+        const b = quote.bill_to || {};
+        let cu = this.customers.find(x => x.id === quote.customer_id);
+        if (!cu && quote.customer_id) {
             const { data } = await supabase.from('customers').select('*').eq('id', quote.customer_id).single();
-            c = data;
+            cu = data;
         }
-        if (!c) {
+        let c;
+        if (cu) c = { name: cu.name, phone: cu.phone || b.phone, email: cu.email || b.email, address: cu.address || b.address, colour: b.colour };
+        else if (b.name) c = { ...b };
+        else {
             const r = await this.ask({ title: 'Customer details for invoice', fields: [
                 { name: 'name', label: 'Customer name', required: true },
                 { name: 'phone', label: 'Phone (optional)', type: 'tel' },
@@ -1571,6 +1575,8 @@ class VinylQuoteApp {
                 { name: 'address', label: 'Address (optional)', multiline: true }], okText: 'Create invoice PDF' });
             if (!r) return;
             c = r;
+            quote.bill_to = { name: r.name, address: r.address, phone: r.phone, email: r.email };
+            supabase.from('saved_quotes').update({ bill_to: quote.bill_to }).eq('id', quote.id).then(() => {}, () => {});
         }
         await this.buildPDF('invoice', quote, c);
     }
@@ -2904,16 +2910,18 @@ class VinylQuoteApp {
         const kinds = [...new Set((sl || []).map(x => x.service_type))];
         const opts = [...new Set((kinds.length ? kinds : ['kitchen']).flatMap(t => BUSINESS.scopes[t] || []))];
         const r = await this.ask({ title: 'Quote details', fields: [
-            { name: 'name', label: 'Customer name', value: l.name || '', required: true },
-            { name: 'address', label: 'Address (one line per row)', value: l.address || '', multiline: true },
-            { name: 'phone', label: 'Phone (optional)', value: l.phone || '', type: 'tel' },
-            { name: 'email', label: 'Email (optional)', value: l.email || '', type: 'email' },
-            { name: 'colour', label: 'Colour / finish chosen', value: (sl || []).map(x => x.colour).find(Boolean) || '', required: true },
+            { name: 'name', label: 'Customer name', value: l.name || (quote.bill_to || {}).name || '', required: true },
+            { name: 'address', label: 'Address (one line per row)', value: l.address || (quote.bill_to || {}).address || '', multiline: true },
+            { name: 'phone', label: 'Phone (optional)', value: l.phone || (quote.bill_to || {}).phone || '', type: 'tel' },
+            { name: 'email', label: 'Email (optional)', value: l.email || (quote.bill_to || {}).email || '', type: 'email' },
+            { name: 'colour', label: 'Colour / finish chosen', value: (quote.bill_to || {}).colour || (sl || []).map(x => x.colour).find(Boolean) || '', required: true },
             { name: 'scope', type: 'checks', label: 'Scope of work (tick what is included)', options: opts, checked: (quote.scope_selected || {}).items || [] },
             { name: 'extra', label: 'Extra scope (one item per line)', multiline: true, value: (quote.scope_selected || {}).extra || '' }], okText: 'Export PDF' });
         if (!r) return;
         quote.scope_selected = { items: r.scope, extra: r.extra };
         supabase.from('saved_quotes').update({ scope_selected: quote.scope_selected }).eq('id', quote.id).then(() => {}, () => {});
+        quote.bill_to = { name: r.name, address: r.address, phone: r.phone, email: r.email, colour: r.colour };
+        supabase.from('saved_quotes').update({ bill_to: quote.bill_to }).eq('id', quote.id).then(() => {}, () => {});
         await this.buildPDF('quote', quote, r);
     }
 
@@ -3019,14 +3027,23 @@ class VinylQuoteApp {
             y += 4;
 
             // totals
-            need(34);
+            need(42);
             const line = (l, v, yy) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...DARK); doc.text(l, 125, yy); doc.text(v, 191, yy, { align: 'right' }); };
+            const depOn = quote.deposit_required !== false, depAmt = total * PRICING.depositPct / 100, depOutstanding = inv && depOn && paid < depAmt - 0.005;
             line('Subtotal', fmtR(total), y);
-            if (inv || quote.deposit_required !== false) line(inv ? 'Amount paid' : `Deposit required (${PRICING.depositPct}%)`, fmtR(inv ? paid : total * PRICING.depositPct / 100), y + 6);
-            y += 11;
+            let ly = y + 6;
+            if (depOn) { line(`Deposit required (${PRICING.depositPct}%)`, fmtR(depAmt), ly); ly += 6; }
+            if (inv) { line('Amount paid', fmtR(paid), ly); ly += 6; }
+            y = ly - 1;
             doc.setFillColor(...DARK); doc.rect(120, y, 75, 11, 'F'); doc.setFillColor(...ORANGE); doc.rect(120, y, 2.5, 11, 'F');
             doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text(inv ? 'BALANCE DUE' : 'TOTAL', 127, y + 7.2);
-            doc.setFontSize(12); doc.text(fmtR(inv ? Math.max(0, total - paid) : total), 191, y + 7.4, { align: 'right' }); y += 20;
+            doc.setFontSize(12); doc.text(fmtR(inv ? Math.max(0, total - paid) : total), 191, y + 7.4, { align: 'right' });
+            if (depOutstanding) {
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...ORANGE);
+                doc.text('Deposit due now', 125, y + 17); doc.text(fmtR(depAmt - paid), 191, y + 17, { align: 'right' });
+                y += 8;
+            }
+            y += 20;
 
             if (inv) {
                 const st = quote.payment_status === 'paid' ? ['PAID IN FULL', [40, 167, 69]] : quote.payment_status === 'partial' ? ['PARTIALLY PAID', [230, 150, 0]] : ['UNPAID', [200, 50, 60]];
@@ -3052,7 +3069,9 @@ class VinylQuoteApp {
                 doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GREY); doc.text(l, 15, y + i * 5.2);
                 doc.setFont('helvetica', 'bold'); doc.setTextColor(...DARK); doc.text(v, 50, y + i * 5.2);
             });
-            const terms = inv ? ['Balance is due on completion of the work.', 'Please use the invoice number as your payment reference.']
+            const terms = inv ? (depOutstanding
+                ? [`A deposit of ${PRICING.depositPct}% (${fmtR(depAmt - paid)}) is payable upfront for material procurement before work commences.`, 'The balance is due on completion of the work.', 'Please use the invoice number as your payment reference.']
+                : (depOn ? ['Balance is due on completion of the work.', 'Please use the invoice number as your payment reference.'] : ['Payment is due on completion of the work.', 'Please use the invoice number as your payment reference.']))
                 : quote.deposit_required === false ? ['Payment is due on completion of the work.', `Quote valid for ${BUSINESS.validityDays} days from the date of issue.`] : [`At least ${PRICING.depositPct}% (${fmtR(total * PRICING.depositPct / 100)}) is payable upfront for material procurement before work commences.`, `Quote valid for ${BUSINESS.validityDays} days from the date of issue.`, 'Balance is due on completion of the work.'];
             let ty = top; doc.setFontSize(8.8);
             terms.forEach(t => {
